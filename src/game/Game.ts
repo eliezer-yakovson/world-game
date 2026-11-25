@@ -27,6 +27,7 @@ import { InventorySystem } from '../systems/InventorySystem';
 import { StrengthEconomy } from '../systems/StrengthEconomy';
 import { FriendshipSystem } from '../systems/FriendshipSystem';
 import { TrafficSystem } from '../systems/TrafficSystem';
+import { ZooLifeSystem } from '../systems/ZooLifeSystem';
 import { HomeLifeSystem } from '../systems/HomeLifeSystem';
 import { HomeTaskDirector, PlayerTaskDirector, progressText, taskLine, tasksForPlayer } from '../characters/homeTasks';
 import { AudioDirector } from '../audio/AudioDirector';
@@ -63,6 +64,7 @@ export class Game {
   private zones = new ZoneManager();
   private npcs = new NpcManager();
   private traffic = new TrafficSystem();
+  private zooLife = new ZooLifeSystem();
   private colliders = new CollisionWorld();
   private lastLanes: THREE.Vector3[][] | undefined;
   private lastLights: ZoneBuildResult['trafficLights'];
@@ -416,6 +418,8 @@ export class Game {
     this.zoneReady = true;
     dressZone(this.zones.group);
     this.traffic.setup(built.carLanes, built.trafficLights, this.zones.group);
+    if (zone === 'zoo') this.zooLife.bind(this.zones.group);
+    else this.zooLife.clear();
     if (zone === 'home') {
       this.homeLife.bindToys(this.zones.group);
       this.applyHomeLayout();
@@ -543,6 +547,7 @@ export class Game {
       this.homeTasks.update(dt);
       if (!this.npcs.isHeld) this.keepApart();
       this.traffic.update(dt);
+      if (this.zones.current === 'zoo') this.zooLife.update(dt);
       if (this.zones.current === 'home') this.homeLife.maybePlayMess(0.0008 * this.timeAccel);
 
       this.interactCooldown = Math.max(0, this.interactCooldown - dt);
@@ -854,7 +859,7 @@ export class Game {
         this.ui.showCaption('הכלב כשכש בזנב. הרגשתם רגועים יותר.');
         break;
       case 'watchAnimal':
-        this.ui.showCaption(`אתם מסתכלים על ${data.animal}. מרשים!`);
+        this.ui.showCaption(`אתם מסתכלים על ${data.animal}. ${data.doing ?? 'מרשים!'}`);
         this.audio.playSfx('success');
         break;
       case 'zooShow':

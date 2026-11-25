@@ -1059,88 +1059,256 @@ function buildPark(): ZoneBuildResult {
   };
 }
 
+const zooDirt = new THREE.MeshStandardMaterial({ color: 0x8a6840, roughness: 1 });
+const zooMeadow = new THREE.MeshStandardMaterial({ color: 0x5c9a46, roughness: 1 });
+const zooStraw = new THREE.MeshStandardMaterial({ color: 0xd7b14a, roughness: 1 });
+const zooDen = new THREE.MeshStandardMaterial({ color: 0x2c261e, roughness: 1 });
+
+interface ZooPen {
+  kind: string;
+  name: string;
+  doing: string;
+  prop: string;
+  height: number;
+  animals: boolean;
+  floor: 'sand' | 'meadow' | 'dirt';
+  food: string;
+  foodH: number;
+  gear: 'den' | 'trough' | 'log' | 'stump' | 'kennel' | 'post' | 'hutch' | 'coop';
+}
+
+function zooMarker(group: THREE.Group, prop: string, height: number, x: number, z: number): void {
+  const marker = box(0.3, 0.3, 0.3, mats.wood, x, 0.16, z);
+  marker.userData.noCollide = true;
+  marker.userData.dress = { prop, fit: 'height', value: height };
+  group.add(marker);
+}
+
+function zooLabel(text: string, x: number, y: number, z: number): THREE.Sprite {
+  const canvas = document.createElement('canvas');
+  canvas.width = 512;
+  canvas.height = 160;
+  const ctx = canvas.getContext('2d');
+  if (ctx) {
+    ctx.fillStyle = 'rgba(48, 32, 18, 0.92)';
+    ctx.fillRect(28, 34, 456, 92);
+    ctx.fillStyle = '#fff6e4';
+    ctx.font = '700 72px Arial, Rubik, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(text, 256, 80);
+  }
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, transparent: true, depthTest: false }));
+  sprite.position.set(x, y, z);
+  sprite.scale.set(2.2, 0.68, 1);
+  sprite.renderOrder = 20;
+  return sprite;
+}
+
+function zooBench(group: THREE.Group, x: number, z: number, face: number): void {
+  group.add(box(1.45, 0.1, 0.46, mats.wood, x, 0.48, z));
+  group.add(box(1.45, 0.5, 0.08, mats.wood, x, 0.78, z + face * 0.2));
+  for (const sx of [-0.55, 0.55]) {
+    for (const sz of [-0.14, 0.14]) {
+      const leg = box(0.08, 0.42, 0.08, mats.wood, x + sx, 0.21, z + sz);
+      leg.userData.noCollide = true;
+      group.add(leg);
+    }
+  }
+}
+
+function zooGear(group: THREE.Group, gear: ZooPen['gear'], x: number, z: number): void {
+  const soft = (mesh: THREE.Mesh) => {
+    mesh.userData.noCollide = true;
+    group.add(mesh);
+  };
+  if (gear === 'den') {
+    zooMarker(group, 'rock_smallA', 0.75, x, z);
+    zooMarker(group, 'rock_smallB', 0.5, x + 0.55, z + 0.15);
+    soft(box(0.7, 0.4, 0.45, zooDen, x, 0.22, z + 0.4));
+    return;
+  }
+  if (gear === 'trough') {
+    soft(box(1.3, 0.28, 0.55, mats.water, x, 0.22, z));
+    soft(box(1.4, 0.1, 0.08, mats.wood, x, 0.38, z - 0.28));
+    soft(box(1.4, 0.1, 0.08, mats.wood, x, 0.38, z + 0.28));
+    soft(box(0.7, 0.32, 0.48, zooStraw, x + 0.9, 0.18, z));
+    return;
+  }
+  if (gear === 'log') {
+    zooMarker(group, 'log_large', 0.48, x, z);
+    return;
+  }
+  if (gear === 'stump') {
+    zooMarker(group, 'stump_round', 0.55, x, z);
+    return;
+  }
+  if (gear === 'post') {
+    group.add(cyl(0.08, 0.9, mats.wood, x, 0.45, z));
+    soft(cyl(0.28, 0.08, mats.wood, x, 0.92, z));
+    return;
+  }
+  if (gear === 'hutch') {
+    group.add(box(1.05, 0.62, 0.8, mats.wood, x, 0.31, z));
+    soft(box(1.2, 0.1, 0.95, zooStraw, x, 0.66, z));
+    soft(box(0.36, 0.36, 0.06, zooDen, x, 0.24, z + 0.4));
+    return;
+  }
+  if (gear === 'coop') {
+    group.add(box(0.9, 0.7, 0.75, mats.wood, x, 0.35, z));
+    soft(box(1.05, 0.1, 0.9, mats.roof, x, 0.74, z));
+    soft(box(0.28, 0.32, 0.06, zooDen, x, 0.22, z + 0.38));
+    return;
+  }
+  group.add(box(1.15, 0.72, 0.95, mats.wood, x, 0.36, z));
+  soft(box(1.3, 0.12, 1.1, mats.roof, x, 0.78, z));
+  soft(box(0.42, 0.42, 0.06, zooDen, x, 0.26, z + 0.48));
+}
+
 function buildZoo(): ZoneBuildResult {
   const group = new THREE.Group();
   group.name = 'zone-zoo';
   const interactables: Interactable[] = [];
 
-  group.add(box(55, 0.2, 45, mats.grass, 0, -0.1, 0));
-  group.add(box(40, 0.12, 3, mats.sidewalk, 0, 0.04, 0));
+  group.add(box(88, 0.2, 54, mats.grass, 0, -0.1, 4));
+  group.add(box(78, 0.12, 4.2, mats.sidewalk, -2, 0.05, 0));
+  group.add(box(4.4, 0.12, 26, mats.sidewalk, 0, 0.05, 13));
 
-  const pens: Array<{ name: string; x: number; z: number; color: number; prop: string }> = [
-    { name: 'אריות', x: -14, z: -8, color: 0xc48a3a, prop: 'Wolf' },
-    { name: 'ג׳ירפות', x: 0, z: -10, color: 0xd4a84b, prop: 'Horse' },
-    { name: 'פינגווינים', x: 14, z: -8, color: 0x2c3a4a, prop: 'Fox' },
-    { name: 'קופים', x: -14, z: 8, color: 0x8b5a2b, prop: 'Deer' },
-    { name: 'ציפורים', x: 14, z: 8, color: 0x3d9b8f, prop: 'ShibaInu' },
+  const pens: ZooPen[] = [
+    { kind: 'wolf', name: 'הזאב', doing: 'מסייר לאורך הגדר ומיילל בפינות.', prop: 'Wolf', height: 1.2, animals: true, floor: 'dirt', food: 'burger', foodH: 0.22, gear: 'den' },
+    { kind: 'horse', name: 'הסוס', doing: 'רץ בסיבוב סביב הכלוב.', prop: 'Horse', height: 1.65, animals: true, floor: 'meadow', food: 'apple', foodH: 0.22, gear: 'trough' },
+    { kind: 'fox', name: 'השועל', doing: 'מתגנב לאט ואז רץ לקצה השני.', prop: 'Fox', height: 0.85, animals: true, floor: 'dirt', food: 'bowl-soup', foodH: 0.22, gear: 'log' },
+    { kind: 'deer', name: 'האייל', doing: 'רועה מהדשא ומרים את הראש.', prop: 'Deer', height: 1.35, animals: true, floor: 'meadow', food: 'carrot', foodH: 0.28, gear: 'stump' },
+    { kind: 'cow', name: 'הפרה', doing: 'הולכת לאט ועוצרת ללעוס.', prop: 'Cow', height: 1.45, animals: true, floor: 'meadow', food: 'grass_large', foodH: 0.35, gear: 'trough' },
+    { kind: 'husky', name: 'ההאסקי', doing: 'רץ סיבובים ואז מכשכש בזנב.', prop: 'Husky', height: 0.95, animals: true, floor: 'sand', food: 'bowl-soup', foodH: 0.22, gear: 'kennel' },
+    { kind: 'cat', name: 'החתול', doing: 'משוטט ואז יושב להתגרד.', prop: 'animal-cat', height: 0.7, animals: false, floor: 'sand', food: 'bowl-soup', foodH: 0.2, gear: 'post' },
+    { kind: 'bunny', name: 'הארנב', doing: 'קופץ ממקום למקום.', prop: 'animal-bunny', height: 0.62, animals: false, floor: 'meadow', food: 'carrot', foodH: 0.26, gear: 'hutch' },
+    { kind: 'chick', name: 'האפרוח', doing: 'מסתובב ומנקר באדמה.', prop: 'animal-chick', height: 0.48, animals: false, floor: 'sand', food: 'bread', foodH: 0.18, gear: 'coop' },
+    { kind: 'dog', name: 'הכלב', doing: 'רץ אל הקערה, מרחרח וחוזר.', prop: 'animal-dog', height: 0.78, animals: false, floor: 'sand', food: 'bowl-soup', foodH: 0.22, gear: 'kennel' },
   ];
 
-  for (const pen of pens) {
-    const fenceH = 1.55;
-    for (const railY of [0.32, 0.82, 1.32]) {
-      group.add(box(8.2, 0.1, 0.1, mats.fence, pen.x, railY, pen.z - 4.05));
-      group.add(box(8.2, 0.1, 0.1, mats.fence, pen.x, railY, pen.z + 4.05));
-      group.add(box(0.1, 0.1, 8, mats.fence, pen.x - 4.05, railY, pen.z));
-      group.add(box(0.1, 0.1, 8, mats.fence, pen.x + 4.05, railY, pen.z));
+  const cols = [-32, -20, -8, 8, 20];
+  pens.forEach((pen, index) => {
+    const x = cols[index % 5];
+    const north = index >= 5;
+    const z = north ? 11 : -11;
+    const face = north ? -1 : 1;
+    const hw = 4.2;
+    const hd = 3.8;
+    const floorMat = pen.floor === 'meadow' ? zooMeadow : pen.floor === 'dirt' ? zooDirt : mats.sand;
+    const floor = box(hw * 2 - 0.4, 0.06, hd * 2 - 0.4, floorMat, x, 0.04, z);
+    floor.userData.noCollide = true;
+    group.add(floor);
+    group.add(box(hw * 2, 1.15, 0.16, mats.fence, x, 0.58, z - face * hd));
+    group.add(box(0.16, 1.15, hd * 2, mats.fence, x - hw, 0.58, z));
+    group.add(box(0.16, 1.15, hd * 2, mats.fence, x + hw, 0.58, z));
+    const frontZ = z + face * hd;
+    for (let px = -hw; px <= hw; px += 0.8) {
+      group.add(box(0.14, 1.4, 0.14, mats.wood, x + px, 0.7, frontZ));
     }
-    for (const [px, pz] of [
-      [-4.1, -4.1],
-      [4.1, -4.1],
-      [-4.1, 4.1],
-      [4.1, 4.1],
-    ]) {
-      group.add(box(0.28, fenceH + 0.25, 0.28, mats.wood, pen.x + px, (fenceH + 0.25) / 2, pen.z + pz));
-    }
-    group.add(box(7.2, 0.08, 7.2, mats.sand, pen.x, 0.05, pen.z));
-    const animal = cyl(0.45, 0.9, new THREE.MeshStandardMaterial({ color: pen.color }), pen.x, 0.5, pen.z + 2.2);
-    animal.name = `animal-${pen.name}`;
-    animal.userData.noCollide = true;
-    animal.userData.dress = { prop: pen.prop, fit: 'height', value: pen.prop === 'Horse' ? 1.7 : 1.15, folder: 'animals' };
-    group.add(animal);
+
+    const backZ = z - face * 2.15;
+    zooMarker(group, pen.food, pen.foodH, x - 2.3, backZ);
+    zooGear(group, pen.gear, x + 2.25, backZ);
+    if (pen.floor === 'meadow') zooMarker(group, 'grass_large', 0.32, x + 1.1, z - face * 0.2);
+
+    const anchor = new THREE.Group();
+    anchor.name = `zoo-animal-${pen.kind}`;
+    anchor.position.set(x, 0, z);
+    anchor.rotation.order = 'YXZ';
+    anchor.userData.noCollide = true;
+    anchor.userData.dressStick = true;
+    anchor.userData.zooPet = { kind: pen.kind, phase: index * 1.35 };
+    anchor.userData.dress = {
+      prop: pen.prop,
+      fit: 'height',
+      value: pen.height,
+      ...(pen.animals ? { folder: 'animals' as const } : {}),
+    };
+    const marker = cyl(0.28, 0.5, mats.sand, 0, 0, 0);
+    marker.userData.noCollide = true;
+    anchor.add(marker);
+    group.add(anchor);
+
+    const signZ = frontZ + face * 0.55;
+    group.add(box(0.12, 1.7, 0.12, mats.wood, x - 3.3, 0.85, signZ));
+    const board = box(1.35, 0.4, 0.08, mats.wood, x - 3.3, 1.7, signZ);
+    board.userData.noCollide = true;
+    group.add(board);
+    group.add(zooLabel(pen.name, x - 3.3, 2.25, signZ));
+    zooBench(group, x + 0.8, frontZ + face * 1.15, face);
+
     interactables.push({
-      id: `pen-${pen.name}`,
+      id: `pen-${pen.kind}`,
       label: `להסתכל על ${pen.name}`,
-      position: new THREE.Vector3(pen.x, 0, pen.z + 5),
-      radius: 2.5,
+      position: new THREE.Vector3(x + 0.8, 0, frontZ + face * 2.3),
+      radius: 2.2,
       type: 'activity',
-      data: { action: 'watchAnimal', animal: pen.name },
+      data: { action: 'watchAnimal', animal: pen.name, doing: pen.doing },
     });
+  });
+
+  for (const [x, z] of [
+    [-40, -16],
+    [-40, 0],
+    [-40, 18],
+    [40, -16],
+    [40, 4],
+    [40, 20],
+    [0, -18],
+    [-18, 22],
+    [22, 22],
+  ] as Array<[number, number]>) {
+    group.add(tree(x, z));
   }
 
-  // Show stage
-  group.add(box(8, 0.4, 4, mats.wood, 0, 0.2, 12));
+  for (const [x, z] of [
+    [-28, 4.7],
+    [-14, -4.7],
+    [2, 4.7],
+    [14, -4.7],
+    [26, 4.7],
+    [-24, -16],
+    [12, -16],
+    [-6, 17],
+    [16, 17],
+    [-36, 8],
+  ] as Array<[number, number]>) {
+    zooMarker(group, 'grass_large', 0.38, x, z);
+  }
+
+  group.add(box(8, 0.4, 4, mats.wood, -16, 0.2, 21));
   interactables.push({
     id: 'show',
     label: 'לצפות במופע היומי',
-    position: new THREE.Vector3(0, 0, 10),
-    radius: 3,
+    position: new THREE.Vector3(-16, 0, 18.5),
+    radius: 2.6,
     type: 'activity',
     data: { action: 'zooShow' },
   });
-
   interactables.push({
     id: 'zoo-shop',
     label: 'חנות מזכרות',
-    position: new THREE.Vector3(10, 0, 12),
+    position: new THREE.Vector3(16, 0, 20),
     radius: 2,
     type: 'shop',
     data: { zooOnly: true },
   });
-
   interactables.push({
     id: 'camera',
     label: 'לצלם תמונה לאלבום',
-    position: new THREE.Vector3(-10, 0, 12),
+    position: new THREE.Vector3(8, 0, 18),
     radius: 2,
     type: 'activity',
     data: { action: 'takePhoto' },
   });
-
   interactables.push({
     id: 'exit-zoo',
     label: 'לחזור לשכונה',
-    position: new THREE.Vector3(0, 0, 18),
-    radius: 2.5,
+    position: new THREE.Vector3(0, 0, 25),
+    radius: 2.4,
     type: 'door',
     data: { target: 'neighborhood' },
   });
@@ -1148,10 +1316,10 @@ function buildZoo(): ZoneBuildResult {
   return {
     group,
     interactables,
-    spawn: new THREE.Vector3(0, 0, 16),
+    spawn: new THREE.Vector3(0, 0, 21),
     npcSpawns: [
-      { id: 'zookeeper', position: new THREE.Vector3(0, 0, 11) },
-      { id: 'maya', position: new THREE.Vector3(4, 0, 8) },
+      { id: 'zookeeper', position: new THREE.Vector3(-3.2, 0, 16) },
+      { id: 'maya', position: new THREE.Vector3(3.4, 0, 15) },
     ],
   };
 }

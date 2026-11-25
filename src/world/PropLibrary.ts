@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { clone as cloneSkinned } from 'three/examples/jsm/utils/SkeletonUtils.js';
 import { cloneCached, loadGlb } from './AssetLoader';
 
 export interface DressSpec {
@@ -74,6 +75,20 @@ const PROP_FOLDER: Record<string, string> = {
   bookcaseOpen: 'furniture',
   rugRectangle: 'furniture',
   table: 'furniture',
+  'bowl-soup': 'food',
+  apple: 'food',
+  bread: 'food',
+  burger: 'food',
+  carrot: 'food',
+  grass_large: 'nature',
+  log_large: 'nature',
+  stump_round: 'nature',
+  rock_smallA: 'nature',
+  rock_smallB: 'nature',
+  'animal-cat': 'pets',
+  'animal-bunny': 'pets',
+  'animal-dog': 'pets',
+  'animal-chick': 'pets',
 };
 
 const EXTRA_MODELS: Array<[string, string]> = [
@@ -168,8 +183,18 @@ function sourceFor(spec: DressSpec): THREE.Group | null {
   return cloneCached(propUrl(spec));
 }
 
+function hasSkinnedMesh(source: THREE.Object3D): boolean {
+  let skinned = false;
+  source.traverse((child) => {
+    if ((child as THREE.SkinnedMesh).isSkinnedMesh) skinned = true;
+  });
+  return skinned;
+}
+
 export function fitClone(source: THREE.Object3D, spec: Pick<DressSpec, 'fit' | 'value'>): THREE.Group {
-  const model = source.clone(true);
+  // Object3D.clone leaves a skinned mesh bound to the source bones, so the
+  // animal draws at the origin instead of inside its pen.
+  const model = (hasSkinnedMesh(source) ? cloneSkinned(source) : source.clone(true)) as THREE.Object3D;
   model.position.set(0, 0, 0);
   model.rotation.set(0, 0, 0);
   model.scale.set(1, 1, 1);
@@ -284,6 +309,12 @@ function applyDress(root: THREE.Group, obj: THREE.Object3D, spec: DressSpec): vo
     model.traverse((child) => {
       child.userData.noCollide = true;
     });
+  }
+  if (obj.userData.dressStick) {
+    hideVisuals(obj);
+    model.position.set(0, 0, 0);
+    obj.add(model);
+    return;
   }
   placeOnBounds(root, bounds, model, bounds.min.y);
   hideVisuals(obj);
@@ -436,18 +467,13 @@ function scatterZone(root: THREE.Group): void {
       { folder: 'nature', model: 'rock_smallB', x: -2, z: 8, height: 0.3, solid: true },
     ],
     'zone-zoo': [
-      { folder: 'nature', model: 'flower_purpleA', x: -6, z: 2, height: 0.4 },
-      { folder: 'nature', model: 'flower_yellowA', x: 6, z: 2, height: 0.4 },
-      { folder: 'nature', model: 'plant_bush', x: -8, z: 14, height: 1, solid: true },
-      { folder: 'nature', model: 'plant_bushSmall', x: 8, z: 14, height: 0.7 },
-      { folder: 'nature', model: 'rock_smallA', x: -4, z: 4, height: 0.35, solid: true },
-      { folder: 'nature', model: 'lily_small', x: 2, z: 6, height: 0.3 },
-      { folder: 'nature', model: 'mushroom_red', x: 16, z: 2, height: 0.28 },
-      { folder: 'pets', model: 'animal-cat', x: -12.4, z: -6.2, height: 0.85 },
-      { folder: 'pets', model: 'animal-bunny', x: 1.6, z: -8.2, height: 0.8 },
-      { folder: 'pets', model: 'animal-chick', x: 12.6, z: -6.2, height: 0.55 },
-      { folder: 'pets', model: 'animal-dog', x: -12.2, z: 10.2, height: 0.9 },
-      { folder: 'holiday', model: 'wreath', x: 10, z: 13, height: 0.5 },
+      { folder: 'nature', model: 'flower_purpleA', x: -14, z: 4.6, height: 0.42 },
+      { folder: 'nature', model: 'flower_yellowA', x: 14, z: -4.6, height: 0.42 },
+      { folder: 'nature', model: 'flower_redA', x: 26, z: 18, height: 0.4 },
+      { folder: 'nature', model: 'plant_bush', x: -40, z: 8, height: 1.1, solid: true },
+      { folder: 'nature', model: 'plant_bushSmall', x: 40, z: -8, height: 0.8, solid: true },
+      { folder: 'nature', model: 'lily_small', x: -26, z: 18, height: 0.32 },
+      { folder: 'holiday', model: 'wreath', x: 6, z: 22, height: 0.5 },
     ],
   };
   for (const item of piles[root.name] ?? []) placeScatter(root, item);

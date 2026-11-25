@@ -14,6 +14,7 @@ import type {
   NpcProfile,
   PlayerProfile,
   ShopProduct,
+  StrengthMap,
   ZoneId,
 } from '../core/types';
 import { PlayerController } from '../characters/PlayerController';
@@ -29,7 +30,9 @@ import { FriendshipSystem } from '../systems/FriendshipSystem';
 import { TrafficSystem } from '../systems/TrafficSystem';
 import { ZooLifeSystem } from '../systems/ZooLifeSystem';
 import { HomeLifeSystem } from '../systems/HomeLifeSystem';
-import { HomeTaskDirector, PlayerTaskDirector, progressText, taskLine, tasksForPlayer } from '../characters/homeTasks';
+import { HomeTaskDirector, PlayerTaskDirector, progressText, taskLine, tasksForPlayer, type TaskChoice } from '../characters/homeTasks';
+import { homeVariants, sceneById, yardScene, type SceneScript } from '../scenes/catalog';
+import { PerformanceDirector } from '../scenes/PerformanceDirector';
 import { AudioDirector } from '../audio/AudioDirector';
 import { UIManager } from '../ui/UIManager';
 import { STRENGTH_LABELS } from '../core/types';
@@ -77,6 +80,10 @@ export class Game {
     onEat: () => this.needs.eat(12),
   });
   private taskMenu = false;
+  private performances!: PerformanceDirector;
+  private sceneLock = false;
+  private homePaused = false;
+  private pendingTask: TaskChoice | null = null;
   private audio = new AudioDirector();
   private saves = new SaveSystem();
   private ui: UIManager;
@@ -156,6 +163,30 @@ export class Game {
 
     this.ui = new UIManager(container);
     this.scenes = new SituationDirector(this.scene, this.camera, this.player, this.npcs, this.ui);
+    this.performances = new PerformanceDirector({
+      caption: (text, ms) => this.ui.showCaption(text, ms),
+      choices: (title, note, options, cancel) => this.ui.showBranches(title, note, options, cancel),
+      clearChoices: () => this.ui.hideSceneDock(),
+      playerAt: () => ({ x: this.player.position.x, z: this.player.position.z, yaw: this.player.cameraYaw }),
+      placePlayer: (x, z) => {
+        this.player.position.set(x, 0, z);
+        this.player.mesh.rotation.y = this.player.cameraYaw;
+      },
+      emote: (kind) => {
+        if (this.playerTasks.active) return;
+        this.player.playEmote(kind, true);
+      },
+      hold: (id, x, z, yaw, clip) => {
+        this.npcs.holdAt(id, x, z, yaw);
+        this.npcs.playClip(id, clip, true);
+      },
+      release: (ids) => {
+        for (const id of ids) this.npcs.releaseActor(id);
+      },
+      add: (object) => this.zones.group.add(object),
+      remove: (object) => this.zones.group.remove(object),
+    });
+    this.performances.onFinished = (awards, title) => this.finishPerformance(awards, title);
     this.bindUI();
     this.npcs.setProfiles(this.npcProfiles);
 
@@ -401,6 +432,7 @@ export class Game {
   }
 
   private goToZone(zone: ZoneId): void {
+    this.endPerformance(false);
     if (this.player.posing) this.endSeat(false);
     const pausedTask = this.playerTasks.yield(this.player);
     this.homeTasks.end();
@@ -425,9 +457,10 @@ export class Game {
       this.applyHomeLayout();
     }
     if (zone === 'home' || zone === 'home_blue' || zone === 'home_yellow') this.homeTasks.begin();
-    const indoor = zone === 'home' || zone === 'home_blue' || zone === 'home_yellow' || zone === 'shop';
-    this.player.cameraDistance = indoor ? 6.2 : zone === 'school' ? 7 : 9;
-    this.player.cameraHeight = indoor ? 3.6 : zone === 'school' ? 4.2 : 5.5;
+    const homeZone = zone === 'home' || zone === 'home_blue' || zone === 'home_yellow';
+    const indoor = homeZone || zone === 'shop';
+    this.player.cameraDistance = homeZone ? 7 : indoor ? 6.2 : zone === 'school' ? 8 : 9;
+    this.player.cameraHeight = homeZone ? 4.3 : indoor ? 3.6 : zone === 'school' ? 4.6 : 5.5;
     this.colliders.rebuild(this.zones.group);
     this.audio.setZone(zone);
     this.collectLamps();
@@ -542,9 +575,10 @@ export class Game {
         this.colliders.resolve(next, radius, this.movingObstacles('player')),
       );
       const grew = this.playerTasks.update(dt, this.player);
-      if (grew && !this.taskMenu) this.ui.showCaption(grew, 1800);
+      if (grew && !this.taskMenu && !this.sceneLock) this.ui.showCaption(grew, 1800);
       this.npcs.update(dt, this.gameClock, this.memory);
       this.homeTasks.update(dt);
+      this.performances.update(dt);
       if (!this.npcs.isHeld) this.keepApart();
       this.traffic.update(dt);
       if (this.zones.current === 'zoo') this.zooLife.update(dt);
@@ -555,7 +589,10 @@ export class Game {
         this.poseMode = null;
         this.ui.hidePoseBar();
       }
-      if (this.player.posing) {
+      if (this.sceneLock) {
+        this.ui.showHint(this.performances.active ? 'הסצנה על המסך. כשהיא נעצרת, הבחירה למטה ממשיכה אותה.' : 'בחרו למטה איך הסצנה תיראה');
+        this.player.consumeInteract();
+      } else if (this.player.posing) {
         this.ui.showHint('[E] לקום');
         if (this.interactCooldown <= 0 && this.player.consumeInteract()) {
           this.endSeat(false);
@@ -735,24 +772,24 @@ export class Game {
         break;
       case 'sitSofa':
         this.beginSeat({
-          x: -1.55,
-          z: 3.35,
+          x: -2.2,
+          z: 5.3,
           yaw: Math.PI,
-          standX: -1.55,
-          standZ: 2.35,
+          standX: -2.2,
+          standZ: 4.4,
           caption: 'ישבתם על הספה. אפשר לקום עם E או עם מקשי התנועה.',
         });
         this.needs.sleep(8);
         break;
       case 'lieBed':
         this.beginSeat({
-          x: -5.1,
-          y: 0.5,
-          z: -4.55,
+          x: -10,
+          y: 0.55,
+          z: -8.2,
           yaw: 0,
           pitch: Math.PI / 2,
-          standX: -3.7,
-          standZ: -3.05,
+          standX: -10,
+          standZ: -6.4,
           caption: 'נשכבתם על המיטה.',
           bed: true,
         });
@@ -854,6 +891,14 @@ export class Game {
         this.blocked = true;
         this.ui.showRecessMenu();
         break;
+      case 'playScene': {
+        const script = sceneById(String(data.scene ?? ''));
+        const task = tasksForPlayer().find((item) => item.kind === data.task);
+        if (this.player.posing) this.endSeat(false);
+        if (task) this.playerTasks.start(task, this.player);
+        if (script) this.beginPerformance(script, false, true);
+        break;
+      }
       case 'petDog':
         this.memory.addStrengths({ friendship: 1, restraint: 1 });
         this.ui.showCaption('הכלב כשכש בזנב. הרגשתם רגועים יותר.');
@@ -1165,10 +1210,34 @@ export class Game {
     }
     if (action === 'task:stop') {
       this.taskMenu = false;
+      this.pendingTask = null;
       this.ui.hideOverlay();
+      this.endPerformance(false);
       this.blocked = false;
       this.playerTasks.yield(this.player);
       this.ui.showCaption('הדמות חזרה ללכת');
+      return;
+    }
+    if (action.startsWith('branch:')) {
+      const id = action.slice(7);
+      if (this.pendingTask) {
+        const choice = this.pendingTask;
+        this.pendingTask = null;
+        this.ui.hideSceneDock();
+        this.sceneLock = false;
+        if (this.player.posing) this.endSeat(false);
+        if (id === 'cancel') {
+          this.blocked = false;
+          this.playerTasks.start(choice, this.player);
+          return;
+        }
+        const script = sceneById(id);
+        this.playerTasks.start(choice, this.player);
+        if (script) this.beginPerformance(script, false, false);
+        else this.blocked = false;
+        return;
+      }
+      this.performances.choose(id);
       return;
     }
     if (action.startsWith('task:')) {
@@ -1176,12 +1245,28 @@ export class Game {
       const choice = tasksForPlayer().find((task) => task.kind === kind);
       this.taskMenu = false;
       this.ui.hideOverlay();
+      if (!choice) {
+        this.blocked = false;
+        return;
+      }
+      const variants = homeVariants(choice.kind);
+      if (!variants.length) {
+        this.blocked = false;
+        if (this.player.posing) this.endSeat(false);
+        this.playerTasks.start(choice, this.player);
+        const name = this.players.find((player) => player.id === this.selectedPlayerId)?.name ?? 'הדמות';
+        this.ui.showCaption(taskLine(this.selectedPlayerId, name, choice.kind));
+        return;
+      }
+      this.pendingTask = choice;
+      this.sceneLock = true;
       this.blocked = false;
-      if (!choice) return;
-      if (this.player.posing) this.endSeat(false);
-      this.playerTasks.start(choice, this.player);
-      const name = this.players.find((player) => player.id === this.selectedPlayerId)?.name ?? 'הדמות';
-      this.ui.showCaption(taskLine(this.selectedPlayerId, name, choice.kind));
+      this.ui.showBranches(
+        choice.title,
+        'בחרו מה בדיוק קורה. זה נשאר על המסך, עם חפצים, ולא נגמר במשפט אחד.',
+        variants.map((variant) => ({ id: variant.id, label: variant.title })),
+        'רק להתחיל, בלי סיפור',
+      );
       return;
     }
     if (action === 'phone') {
@@ -1248,6 +1333,13 @@ export class Game {
     if (action.startsWith('recess:')) {
       const role = action.slice(7);
       this.ui.hideOverlay();
+      const script = yardScene(role);
+      if (script) {
+        this.playerTasks.yield(this.player);
+        if (this.player.posing) this.endSeat(false);
+        this.beginPerformance(script, true, true);
+        return;
+      }
       this.blocked = false;
       const games: Record<string, { text: string; speech?: number; courage?: number; friendship?: number; flexibility?: number; restraint?: number; creativity?: number }> = {
         organizer: { text: 'ארגנתם תופסת בחצר.', speech: 2, courage: 1, friendship: 1 },
@@ -1370,6 +1462,55 @@ export class Game {
     }
   }
 
+  private atHome(): boolean {
+    return this.zones.current === 'home' || this.zones.current === 'home_blue' || this.zones.current === 'home_yellow';
+  }
+
+  private beginPerformance(script: SceneScript, movePlayer: boolean, gather: boolean): void {
+    if (this.atHome() && gather) {
+      this.homeTasks.end();
+      this.homePaused = true;
+    }
+    this.sceneLock = true;
+    this.blocked = false;
+    this.player.taskHold = true;
+    this.performances.start(script, movePlayer, gather);
+  }
+
+  private finishPerformance(awards: Partial<StrengthMap> | undefined, title: string): void {
+    this.sceneLock = false;
+    this.blocked = false;
+    if (!this.playerTasks.active) this.player.releaseHold();
+    if (this.homePaused) {
+      this.homePaused = false;
+      if (this.atHome()) this.homeTasks.begin();
+    }
+    if (!title && !awards) return;
+    if (awards) {
+      const gained = this.memory.addStrengths(awards);
+      const bits = (Object.entries(gained) as Array<[keyof StrengthMap, number]>)
+        .filter(([, value]) => value > 0)
+        .map(([key, value]) => `${STRENGTH_LABELS[key]} +${value}`);
+      this.ui.showCaption(bits.length ? `${title}. ${bits.join(' · ')}` : `${title} נגמרה.`);
+      this.audio.playSfx('success');
+      return;
+    }
+    this.ui.showCaption(`${title} נגמרה.`);
+  }
+
+  /** Leaves a scene without the closing caption. Used when the zone changes. */
+  private endPerformance(resumeHome: boolean): void {
+    this.performances.stop(false);
+    this.sceneLock = false;
+    this.pendingTask = null;
+    this.ui.hideSceneDock();
+    if (!this.playerTasks.active) this.player.releaseHold();
+    if (this.homePaused) {
+      this.homePaused = false;
+      if (resumeHome && this.atHome()) this.homeTasks.begin();
+    }
+  }
+
   private npcName(id: string): string {
     return this.npcProfiles.find((n) => n.id === id)?.name ?? id;
   }
@@ -1386,6 +1527,14 @@ export class Game {
     window.addEventListener('keydown', (e) => {
       const typing = e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLSelectElement;
       if (e.code === 'KeyT' && this.running && !typing) {
+        if (this.sceneLock) {
+          if (this.pendingTask) {
+            this.pendingTask = null;
+            this.sceneLock = false;
+            this.ui.hideSceneDock();
+          }
+          return;
+        }
         if (this.taskMenu) {
           this.taskMenu = false;
           this.ui.hideOverlay();

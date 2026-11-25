@@ -582,6 +582,10 @@ button:disabled {
   display: block;
 }
 
+#ui-root:has(.scene-dock.visible) .caption {
+  bottom: 290px;
+}
+
 .weather-rain {
   position: absolute;
   inset: 0;

@@ -31,6 +31,7 @@ export class UIManager {
   private rain: HTMLDivElement;
   private hudButtons: HTMLDivElement;
   private zoneLabel = 'הבית';
+  private captionTimer = 0;
 
   onChoice?: (choiceId: string) => void;
   onBreathe?: () => void;
@@ -172,7 +173,8 @@ export class UIManager {
   showCaption(text: string, ms = 3200): void {
     this.caption.textContent = text;
     this.caption.classList.add('visible');
-    window.setTimeout(() => this.caption.classList.remove('visible'), ms);
+    window.clearTimeout(this.captionTimer);
+    this.captionTimer = window.setTimeout(() => this.caption.classList.remove('visible'), ms);
   }
 
   showTitle(
@@ -285,6 +287,27 @@ export class UIManager {
     this.sceneDock.classList.remove('visible');
     this.sceneDock.innerHTML = '';
     this.breatheBtn.classList.remove('visible');
+  }
+
+  /** Choices that stay at the bottom so the scene behind them remains visible. */
+  showBranches(title: string, note: string, choices: Array<{ id: string; label: string }>, cancelLabel: string): void {
+    this.hideOverlay();
+    this.sceneDock.classList.add('visible');
+    const buttons = choices
+      .map((choice) => `<button data-branch="${choice.id}">${choice.label}</button>`)
+      .join('');
+    this.sceneDock.innerHTML = `
+      <div class="panel">
+        <h2>${title}</h2>
+        <p>${note}</p>
+        <div class="btn-row">${buttons}</div>
+        <button class="ghost" id="branch-cancel" style="margin-top:10px">${cancelLabel}</button>
+      </div>
+    `;
+    this.sceneDock.querySelectorAll('[data-branch]').forEach((button) => {
+      button.addEventListener('click', () => this.onHudAction?.(`branch:${(button as HTMLElement).dataset.branch}`));
+    });
+    this.sceneDock.querySelector('#branch-cancel')?.addEventListener('click', () => this.onHudAction?.('branch:cancel'));
   }
 
   playBreatheAnimation(): Promise<void> {

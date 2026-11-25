@@ -50,22 +50,28 @@ interface Outfit {
   bib?: number;
   pockets?: boolean;
   tunic?: boolean;
+  head?: 'kippah' | 'scarf' | 'hat';
+  kippah?: number;
+  scarf?: number;
+  peyot?: boolean;
+  jacket?: number;
+  tie?: number;
 }
 
 const OUTFITS: Record<string, Outfit> = {
   yael: { top: 0x3d6ea8, topAccent: 0xe7eef8, topPattern: 'stripes', sleeves: 'short', bottom: 'shorts', bottomColor: 0x3a342c },
   maya: { top: 0xe56b93, topAccent: 0xfff0f5, topPattern: 'dots', sleeves: 'puff', sleeve: 0xf2a0c0, bottom: 'skirt', bottomColor: 0xe56b93, bottomAccent: 0xfff0f5, bottomPattern: 'dots' },
-  ori: { top: 0x3d7a9a, sleeves: 'long', sleeve: 0x2f6278, bottom: 'pants', bottomColor: 0x3a3f4a, hood: 0x2c5d74 },
+  ori: { top: 0x3d7a9a, sleeves: 'long', sleeve: 0x2f6278, bottom: 'pants', bottomColor: 0x3a3f4a, head: 'kippah', peyot: true },
   tala: { top: 0xe2b143, sleeves: 'short', sleeve: 0xf0d48a, bottom: 'skirt', bottomColor: 0x6e4b32, collar: 0xfff6e4 },
-  roni: { top: 0x2f8a4a, topAccent: 0xf4f7f2, topPattern: 'band', sleeves: 'short', sleeve: 0xf4f7f2, bottom: 'shorts', bottomColor: 0x24324a },
-  brother: { top: 0x3a4e86, sleeves: 'short', sleeve: 0x3a4e86, bottom: 'pants', bottomColor: 0xe07a32, bib: 0xe07a32 },
+  roni: { top: 0x2f8a4a, topAccent: 0xf4f7f2, topPattern: 'band', sleeves: 'short', sleeve: 0xf4f7f2, bottom: 'shorts', bottomColor: 0x24324a, head: 'kippah', kippah: 0x24324a, peyot: true },
+  brother: { top: 0x3a4e86, sleeves: 'short', sleeve: 0x3a4e86, bottom: 'pants', bottomColor: 0xe07a32, bib: 0xe07a32, head: 'kippah', kippah: 0x1d4e89, peyot: true },
   sister: { top: 0x5c8a7a, sleeves: 'long', sleeve: 0x4a7366, bottom: 'pants', bottomColor: 0x39425c, tunic: true },
-  mom: { top: 0xc4537a, sleeves: 'short', sleeve: 0xd67a9a, bottom: 'longskirt', bottomColor: 0x3e4c6a, collar: 0xf8e4ec },
-  dad: { top: 0xf4f4f2, topAccent: 0xc8c4bc, topPattern: 'buttons', sleeves: 'long', sleeve: 0xe7e4de, bottom: 'pants', bottomColor: 0x5c5344, collar: 0xf7f4ef, suspenders: 0x6b4228 },
+  mom: { top: 0xc4537a, sleeves: 'short', sleeve: 0xd67a9a, bottom: 'longskirt', bottomColor: 0x3e4c6a, collar: 0xf8e4ec, head: 'scarf', scarf: 0xc4537a },
+  dad: { top: 0xf7f4ef, sleeves: 'long', sleeve: 0xf7f4ef, bottom: 'pants', bottomColor: 0x1c2433, collar: 0xf7f4ef, head: 'hat', peyot: true, jacket: 0x1a2744, tie: 0x7a1f2b },
   teacher: { top: 0x2c4460, sleeves: 'long', sleeve: 0x2c4460, bottom: 'pencil', bottomColor: 0x4a3b32, collar: 0xf7f4ef },
-  shopkeeper: { top: 0xc4473a, sleeves: 'short', sleeve: 0xa33a30, bottom: 'pants', bottomColor: 0x3a342e, apron: 0xe4d2ae },
-  noam: { top: 0x4c6b8a, topAccent: 0xe4ebf4, topPattern: 'band', sleeves: 'none', bottom: 'pants', bottomColor: 0xc2b48a, bottomAccent: 0x4c6b8a, bottomPattern: 'band' },
-  dani: { top: 0xe6d39a, sleeves: 'short', sleeve: 0xe6d39a, bottom: 'shorts', bottomColor: 0x3d5a86, vest: 'open', vestColor: 0x6b4228 },
+  shopkeeper: { top: 0xc4473a, sleeves: 'short', sleeve: 0xa33a30, bottom: 'pants', bottomColor: 0x3a342e, apron: 0xe4d2ae, head: 'kippah', peyot: true },
+  noam: { top: 0x4c6b8a, topAccent: 0xe4ebf4, topPattern: 'band', sleeves: 'none', bottom: 'pants', bottomColor: 0xc2b48a, bottomAccent: 0x4c6b8a, bottomPattern: 'band', head: 'kippah', kippah: 0x1a1a1a, peyot: true },
+  dani: { top: 0xe6d39a, sleeves: 'short', sleeve: 0xe6d39a, bottom: 'shorts', bottomColor: 0x3d5a86, vest: 'open', vestColor: 0x6b4228, head: 'kippah', kippah: 0x2a2a2a, peyot: true },
   neighbor: { top: 0x6e9a5e, topAccent: 0xf3d36a, topPattern: 'floral', sleeves: 'long', sleeve: 0x5e8a52, bottom: 'longskirt', bottomColor: 0xf6f1e6, bottomAccent: 0xc45b7a, bottomPattern: 'floral' },
   zookeeper: { top: 0xc2b48a, sleeves: 'short', sleeve: 0xc2b48a, bottom: 'pants', bottomColor: 0x6a5a3a, vest: 'front', vestColor: 0x3e4a3a, pockets: true },
 };
@@ -179,6 +185,49 @@ function piecesFor(outfit: Outfit): Piece[] {
   if (outfit.pockets) {
     pieces.push(box('UpperLegL', [0.12, 0.12, 0.08], [0.4, 0.72, 0.06], 0x4a3e2c, true));
     pieces.push(box('UpperLegR', [0.12, 0.12, 0.08], [-0.4, 0.72, 0.06], 0x4a3e2c, true));
+  }
+
+  if (outfit.jacket !== undefined) {
+    const color = outfit.jacket;
+    pieces.push(box('Torso', [0.86, 0.82, 0.07], [0, 1.55, 0.38], color, true));
+    pieces.push(box('Torso', [0.86, 0.82, 0.07], [0, 1.55, -0.4], color, true));
+    pieces.push(box('Torso', [0.08, 0.78, 0.55], [-0.42, 1.52, -0.02], color, true));
+    pieces.push(box('Torso', [0.08, 0.78, 0.55], [0.42, 1.52, -0.02], color, true));
+  }
+  if (outfit.tie !== undefined) {
+    pieces.push(box('Torso', [0.07, 0.46, 0.04], [0, 1.5, 0.44], outfit.tie, true));
+  }
+  if (outfit.head === 'kippah') {
+    pieces.push({
+      bone: 'Head',
+      kind: 'sphere',
+      size: [0.26, 14, 10],
+      position: [0, 3.08, 0.02],
+      scale: [1.25, 0.48, 1.25],
+      color: outfit.kippah ?? 0x161616,
+    });
+  }
+  if (outfit.head === 'scarf') {
+    const color = outfit.scarf ?? outfit.top;
+    pieces.push({
+      bone: 'Head',
+      kind: 'sphere',
+      size: [0.42, 16, 12],
+      position: [0, 3.05, -0.08],
+      scale: [1.4, 0.55, 1.35],
+      color,
+    });
+    pieces.push(box('Head', [0.62, 0.14, 0.36], [0, 2.78, 0.16], color, true));
+    pieces.push(box('Head', [0.34, 1.1, 0.08], [0.1, 1.82, -0.42], color, true));
+  }
+  if (outfit.head === 'hat') {
+    pieces.push(cyl('Head', 0.2, 0.22, 0.42, [0, 3.22, 0.02], 0x141414));
+    pieces.push(cyl('Head', 0.46, 0.46, 0.06, [0, 3.0, 0.02], 0x141414));
+  }
+  if (outfit.peyot) {
+    const hair = 0x2a1a12;
+    pieces.push(box('Head', [0.08, 0.78, 0.08], [0.32, 2.12, 0.2], hair, true));
+    pieces.push(box('Head', [0.08, 0.78, 0.08], [-0.32, 2.12, 0.2], hair, true));
   }
 
   return pieces;

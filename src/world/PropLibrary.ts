@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { clone as cloneSkinned } from 'three/examples/jsm/utils/SkeletonUtils.js';
 import { cloneCached, loadGlb } from './AssetLoader';
 
 export interface DressSpec {
@@ -74,6 +75,20 @@ const PROP_FOLDER: Record<string, string> = {
   bookcaseOpen: 'furniture',
   rugRectangle: 'furniture',
   table: 'furniture',
+  'bowl-soup': 'food',
+  apple: 'food',
+  bread: 'food',
+  burger: 'food',
+  carrot: 'food',
+  grass_large: 'nature',
+  log_large: 'nature',
+  stump_round: 'nature',
+  rock_smallA: 'nature',
+  rock_smallB: 'nature',
+  'animal-cat': 'pets',
+  'animal-bunny': 'pets',
+  'animal-dog': 'pets',
+  'animal-chick': 'pets',
 };
 
 const EXTRA_MODELS: Array<[string, string]> = [
@@ -168,8 +183,18 @@ function sourceFor(spec: DressSpec): THREE.Group | null {
   return cloneCached(propUrl(spec));
 }
 
+function hasSkinnedMesh(source: THREE.Object3D): boolean {
+  let skinned = false;
+  source.traverse((child) => {
+    if ((child as THREE.SkinnedMesh).isSkinnedMesh) skinned = true;
+  });
+  return skinned;
+}
+
 export function fitClone(source: THREE.Object3D, spec: Pick<DressSpec, 'fit' | 'value'>): THREE.Group {
-  const model = source.clone(true);
+  // Object3D.clone leaves a skinned mesh bound to the source bones, so the
+  // animal draws at the origin instead of inside its pen.
+  const model = (hasSkinnedMesh(source) ? cloneSkinned(source) : source.clone(true)) as THREE.Object3D;
   model.position.set(0, 0, 0);
   model.rotation.set(0, 0, 0);
   model.scale.set(1, 1, 1);
@@ -186,6 +211,13 @@ export function fitClone(source: THREE.Object3D, spec: Pick<DressSpec, 'fit' | '
   const wrap = new THREE.Group();
   wrap.add(model);
   return wrap;
+}
+
+export function trafficLightModel(height = 3.25): THREE.Group | null {
+  if (!ready) return null;
+  const src = cloneCached('/assets/models/props/roads/traffic-light.glb');
+  if (!src) return null;
+  return fitClone(src, { fit: 'height', value: height });
 }
 
 /** Kenney cars face +Z; Three.js lookAt aims -Z, so turn the model around. */
@@ -278,6 +310,12 @@ function applyDress(root: THREE.Group, obj: THREE.Object3D, spec: DressSpec): vo
       child.userData.noCollide = true;
     });
   }
+  if (obj.userData.dressStick) {
+    hideVisuals(obj);
+    model.position.set(0, 0, 0);
+    obj.add(model);
+    return;
+  }
   placeOnBounds(root, bounds, model, bounds.min.y);
   hideVisuals(obj);
 }
@@ -285,16 +323,10 @@ function applyDress(root: THREE.Group, obj: THREE.Object3D, spec: DressSpec): vo
 function addNeighborhoodExtras(root: THREE.Group): void {
   if (!root.getObjectByName('home-green')) return;
   const signSrc = cloneCached('/assets/models/props/roads/road-sign-stop.glb');
-  const lightSrc = cloneCached('/assets/models/props/roads/traffic-light.glb');
   if (signSrc) {
     const sign = fitClone(signSrc, { fit: 'height', value: 2.3 });
-    sign.position.set(3.2, 0, 2.6);
+    sign.position.set(2.4, 0, 5.9);
     root.add(sign);
-  }
-  if (lightSrc) {
-    const light = fitClone(lightSrc, { fit: 'height', value: 3.3 });
-    light.position.set(-3.4, 0, 2.6);
-    root.add(light);
   }
 }
 
@@ -303,7 +335,7 @@ function addHomeExtras(root: THREE.Group): void {
   const plantSrc = cloneCached('/assets/models/props/furniture/pottedPlant.glb');
   if (!plantSrc) return;
   const plant = fitClone(plantSrc, { fit: 'height', value: 0.85 });
-  plant.position.set(-6.4, 0, 1.6);
+    plant.position.set(-7.35, 0, 5.35);
   root.add(plant);
 }
 
@@ -335,30 +367,28 @@ function placeScatter(root: THREE.Group, item: ScatterItem): void {
 function scatterZone(root: THREE.Group): void {
   const piles: Record<string, ScatterItem[]> = {
     'zone-home': [
-      { folder: 'food', model: 'apple', x: 3.15, z: -2.7, y: 0.78, height: 0.16 },
-      { folder: 'food', model: 'bread', x: 2.65, z: -3.25, y: 0.78, height: 0.14 },
-      { folder: 'food', model: 'bowl-soup', x: 3.45, z: -3.3, y: 0.78, height: 0.12 },
-      { folder: 'food', model: 'cake', x: -4.15, z: 0.15, y: 0.48, height: 0.2 },
-      { folder: 'food', model: 'banana', x: -3.55, z: -0.25, y: 0.48, height: 0.12 },
-      { folder: 'food', model: 'candy-bar', x: 4.4, z: 3.1, height: 0.08 },
-      { folder: 'food', model: 'plate', x: 2.9, z: -2.85, y: 0.78, height: 0.06 },
-      { folder: 'food', model: 'cup', x: 3.7, z: -2.55, y: 0.78, height: 0.12 },
-      { folder: 'food', model: 'donut', x: -3.9, z: 0.45, y: 0.48, height: 0.08 },
-      { folder: 'food', model: 'cookie', x: 4.8, z: 2.6, height: 0.06 },
-      { folder: 'food', model: 'ice-cream', x: -5.2, z: 4.2, height: 0.22 },
-      { folder: 'food', model: 'pizza', x: 1.2, z: 3.4, height: 0.08 },
-      { folder: 'food', model: 'carrot', x: 5.6, z: -4.2, y: 0.55, height: 0.16 },
-      { folder: 'food', model: 'broccoli', x: 6.1, z: -3.6, y: 0.55, height: 0.2 },
-      { folder: 'furniture', model: 'bear', x: -5.7, z: 3.5, height: 0.42 },
-      { folder: 'holiday', model: 'present-a-cube', x: -4.5, z: 3.7, height: 0.26 },
-      { folder: 'furniture', model: 'pillowBlue', x: -6.3, z: 2.5, height: 0.16 },
-      { folder: 'furniture', model: 'lampRoundTable', x: -1.4, z: -2.4, height: 0.55 },
-      { folder: 'furniture', model: 'toaster', x: 5.3, z: -4.7, y: 0.55, height: 0.28 },
-      { folder: 'furniture', model: 'kitchenCoffeeMachine', x: 6.3, z: -4.5, y: 0.55, height: 0.36 },
-      { folder: 'furniture', model: 'televisionModern', x: -7.2, z: -2.2, height: 0.7, yaw: Math.PI / 2, solid: true },
-      { folder: 'furniture', model: 'plantSmall1', x: 7.3, z: 1.4, height: 0.45 },
-      { folder: 'furniture', model: 'books', x: 6.45, z: 1.85, y: 0.85, height: 0.2 },
-      { folder: 'holiday', model: 'lights-colored', x: 0, z: -6.4, height: 0.35 },
+      { folder: 'food', model: 'apple', x: 3.05, z: -4.15, y: 0.82, height: 0.16 },
+      { folder: 'food', model: 'bread', x: 3.45, z: -4.45, y: 0.82, height: 0.14 },
+      { folder: 'food', model: 'bowl-soup', x: 2.9, z: -4.5, y: 0.82, height: 0.12 },
+      { folder: 'food', model: 'plate', x: 3.55, z: -4.05, y: 0.8, height: 0.06 },
+      { folder: 'food', model: 'cup', x: 3.7, z: -4.4, y: 0.82, height: 0.12 },
+      { folder: 'food', model: 'carrot', x: 4.9, z: -6.05, y: 0.95, height: 0.16 },
+      { folder: 'food', model: 'broccoli', x: 5.55, z: -6.05, y: 0.95, height: 0.18 },
+      { folder: 'furniture', model: 'toaster', x: 5.05, z: -6.25, y: 0.95, height: 0.26 },
+      { folder: 'furniture', model: 'kitchenCoffeeMachine', x: 5.7, z: -6.28, y: 0.95, height: 0.32 },
+      { folder: 'food', model: 'cake', x: 1.2, z: 3.55, y: 0.5, height: 0.18 },
+      { folder: 'food', model: 'banana', x: 1.55, z: 3.85, y: 0.48, height: 0.12 },
+      { folder: 'food', model: 'donut', x: 1.15, z: 3.9, y: 0.48, height: 0.08 },
+      { folder: 'food', model: 'candy-bar', x: -6.15, z: 2.05, y: 0.78, height: 0.08 },
+      { folder: 'food', model: 'cookie', x: -6.55, z: 2.25, y: 0.78, height: 0.06 },
+      { folder: 'furniture', model: 'bear', x: -6.6, z: 4.15, height: 0.42 },
+      { folder: 'holiday', model: 'present-a-cube', x: -5.7, z: 4.35, height: 0.26 },
+      { folder: 'furniture', model: 'pillowBlue', x: -5.4, z: -4.2, y: 0.55, height: 0.16 },
+      { folder: 'furniture', model: 'televisionModern', x: -2.75, z: 5.15, height: 0.62, yaw: Math.PI / 2, solid: true },
+      { folder: 'furniture', model: 'plantSmall1', x: 7.35, z: 1.55, height: 0.42 },
+      { folder: 'furniture', model: 'books', x: 8.15, z: 2.55, y: 1.15, height: 0.18 },
+      { folder: 'food', model: 'ice-cream', x: -7.0, z: 3.55, height: 0.2 },
+      { folder: 'holiday', model: 'lights-colored', x: 0.2, z: 5.7, height: 0.28 },
     ],
     'zone-park': [
       { folder: 'nature', model: 'flower_redA', x: -8, z: 6, height: 0.45 },
@@ -437,18 +467,13 @@ function scatterZone(root: THREE.Group): void {
       { folder: 'nature', model: 'rock_smallB', x: -2, z: 8, height: 0.3, solid: true },
     ],
     'zone-zoo': [
-      { folder: 'nature', model: 'flower_purpleA', x: -6, z: 2, height: 0.4 },
-      { folder: 'nature', model: 'flower_yellowA', x: 6, z: 2, height: 0.4 },
-      { folder: 'nature', model: 'plant_bush', x: -8, z: 14, height: 1, solid: true },
-      { folder: 'nature', model: 'plant_bushSmall', x: 8, z: 14, height: 0.7 },
-      { folder: 'nature', model: 'rock_smallA', x: -4, z: 4, height: 0.35, solid: true },
-      { folder: 'nature', model: 'lily_small', x: 2, z: 6, height: 0.3 },
-      { folder: 'nature', model: 'mushroom_red', x: 16, z: 2, height: 0.28 },
-      { folder: 'pets', model: 'animal-cat', x: -12.4, z: -6.2, height: 0.85 },
-      { folder: 'pets', model: 'animal-bunny', x: 1.6, z: -8.2, height: 0.8 },
-      { folder: 'pets', model: 'animal-chick', x: 12.6, z: -6.2, height: 0.55 },
-      { folder: 'pets', model: 'animal-dog', x: -12.2, z: 10.2, height: 0.9 },
-      { folder: 'holiday', model: 'wreath', x: 10, z: 13, height: 0.5 },
+      { folder: 'nature', model: 'flower_purpleA', x: -14, z: 4.6, height: 0.42 },
+      { folder: 'nature', model: 'flower_yellowA', x: 14, z: -4.6, height: 0.42 },
+      { folder: 'nature', model: 'flower_redA', x: 26, z: 18, height: 0.4 },
+      { folder: 'nature', model: 'plant_bush', x: -40, z: 8, height: 1.1, solid: true },
+      { folder: 'nature', model: 'plant_bushSmall', x: 40, z: -8, height: 0.8, solid: true },
+      { folder: 'nature', model: 'lily_small', x: -26, z: 18, height: 0.32 },
+      { folder: 'holiday', model: 'wreath', x: 6, z: 22, height: 0.5 },
     ],
   };
   for (const item of piles[root.name] ?? []) placeScatter(root, item);

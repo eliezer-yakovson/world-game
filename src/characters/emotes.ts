@@ -6,7 +6,8 @@ const CLIP: Record<string, RegExp> = {
   idle: /idle/i,
   stomp: /punch|slash/i,
   clean: /pick/i,
-  sad: /defeat|death/i,
+  // SitDown only. A broader /defeat|death/ match hits Death first and the character collapses.
+  sad: /sitdown/i,
   hide: /sit/i,
   sit: /sitdown/i,
   stand: /standup/i,

@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { clone as cloneSkinned } from 'three/examples/jsm/utils/SkeletonUtils.js';
+import { presentCharacter } from '../characters/presentCharacter';
 
 const loader = new GLTFLoader();
 const cache = new Map<string, THREE.Group>();
@@ -28,6 +29,8 @@ export async function loadGlb(url: string, scale = 1): Promise<THREE.Group | nul
         standard.roughness = Math.max(standard.roughness, 0.72);
       }
     });
+    const characterId = url.match(/\/characters\/([^/]+)\.glb/i)?.[1];
+    if (characterId) presentCharacter(root, characterId);
     cache.set(url, root as THREE.Group);
     animCache.set(url, gltf.animations ?? []);
     return cloneSkinned(root) as THREE.Group;

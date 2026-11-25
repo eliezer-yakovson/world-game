@@ -19,6 +19,7 @@ import type {
 import { PlayerController } from '../characters/PlayerController';
 import { NpcManager } from '../characters/NpcManager';
 import { ZoneManager } from '../world/ZoneManager';
+import type { ZoneBuildResult } from '../world/ZoneBuilder';
 import { SituationEngine } from '../situations/SituationEngine';
 import { SituationDirector } from '../situations/SituationDirector';
 import { NeedsSystem } from '../systems/NeedsSystem';
@@ -26,7 +27,9 @@ import { InventorySystem } from '../systems/InventorySystem';
 import { StrengthEconomy } from '../systems/StrengthEconomy';
 import { FriendshipSystem } from '../systems/FriendshipSystem';
 import { TrafficSystem } from '../systems/TrafficSystem';
+import { ZooLifeSystem } from '../systems/ZooLifeSystem';
 import { HomeLifeSystem } from '../systems/HomeLifeSystem';
+import { HomeTaskDirector, PlayerTaskDirector, progressText, taskLine, tasksForPlayer } from '../characters/homeTasks';
 import { AudioDirector } from '../audio/AudioDirector';
 import { UIManager } from '../ui/UIManager';
 import { STRENGTH_LABELS } from '../core/types';
@@ -61,11 +64,19 @@ export class Game {
   private zones = new ZoneManager();
   private npcs = new NpcManager();
   private traffic = new TrafficSystem();
+  private zooLife = new ZooLifeSystem();
   private colliders = new CollisionWorld();
-  private lastCarPath: THREE.Vector3[] | undefined;
+  private lastLanes: THREE.Vector3[][] | undefined;
+  private lastLights: ZoneBuildResult['trafficLights'];
   private npcLastPos = new Map<string, THREE.Vector3>();
   private zoneReady = false;
   private homeLife = new HomeLifeSystem();
+  private homeTasks = new HomeTaskDirector(this.npcs, () => this.homeLife.decreaseMess(1));
+  private playerTasks = new PlayerTaskDirector({
+    onSweep: () => this.homeLife.decreaseMess(1),
+    onEat: () => this.needs.eat(12),
+  });
+  private taskMenu = false;
   private audio = new AudioDirector();
   private saves = new SaveSystem();
   private ui: UIManager;
@@ -176,7 +187,7 @@ export class Game {
       this.player.setCharacterModel(this.selectedPlayerId);
       if (!this.zoneReady) return;
       dressZone(this.zones.group);
-      this.traffic.setup(this.lastCarPath, this.zones.group);
+      this.traffic.setup(this.lastLanes ?? this.zones.carLanes, this.lastLights ?? this.zones.trafficLights, this.zones.group);
       this.colliders.rebuild(this.zones.group);
     });
     this.ui.showTitle(this.players, this.saves.listSlots(), Boolean(this.saves.loadAutosave()));
@@ -187,6 +198,10 @@ export class Game {
     this.ui.onCharacterSelect = (id, freePlay) => this.beginNewGame(id, Boolean(freePlay));
     this.ui.onChoice = (id) => this.resolveChoice(id);
     this.ui.onBreathe = () => void this.handleBreathe();
+    this.ui.onUnblock = () => {
+      this.blocked = false;
+      this.taskMenu = false;
+    };
     this.ui.onCloseOverlay = () => {
       this.scenes.clear();
       this.npcs.setHeld(false);
@@ -339,6 +354,10 @@ export class Game {
     const seen = new Set<string>();
     for (const actor of this.npcs.actors) {
       seen.add(actor.id);
+      if (actor.anchored) {
+        this.npcLastPos.set(actor.id, actor.mesh.position.clone());
+        continue;
+      }
       const desired = actor.mesh.position.clone();
       const from = this.npcLastPos.get(actor.id) ?? desired;
       const resolved = this.colliders.slide(from, desired, 0.5, this.movingObstacles(actor.id));
@@ -383,6 +402,8 @@ export class Game {
 
   private goToZone(zone: ZoneId): void {
     if (this.player.posing) this.endSeat(false);
+    const pausedTask = this.playerTasks.yield(this.player);
+    this.homeTasks.end();
     this.unlockedZones = unlockZone(this.unlockedZones, zone);
     const built = this.zones.load(zone, this.scene);
     this.player.position.copy(built.spawn);
@@ -392,14 +413,18 @@ export class Game {
       this.memory.addDiary(this.pendingGuestId, this.gameClock.timeLabel, 'הגיע לבקר בבית השחקן');
     }
     this.npcs.spawn(this.zones.group, spawns, this.memory);
-    this.lastCarPath = built.carPath;
+    this.lastLanes = built.carLanes;
+    this.lastLights = built.trafficLights;
     this.zoneReady = true;
     dressZone(this.zones.group);
-    this.traffic.setup(built.carPath, this.zones.group);
+    this.traffic.setup(built.carLanes, built.trafficLights, this.zones.group);
+    if (zone === 'zoo') this.zooLife.bind(this.zones.group);
+    else this.zooLife.clear();
     if (zone === 'home') {
       this.homeLife.bindToys(this.zones.group);
       this.applyHomeLayout();
     }
+    if (zone === 'home' || zone === 'home_blue' || zone === 'home_yellow') this.homeTasks.begin();
     const indoor = zone === 'home' || zone === 'home_blue' || zone === 'home_yellow' || zone === 'shop';
     this.player.cameraDistance = indoor ? 6.2 : zone === 'school' ? 7 : 9;
     this.player.cameraHeight = indoor ? 3.6 : zone === 'school' ? 4.2 : 5.5;
@@ -408,6 +433,7 @@ export class Game {
     this.collectLamps();
     this.refreshHud();
     this.audio.playSfx('door');
+    if (pausedTask) this.ui.showCaption('המשימה נעצרה. מה שכבר נבנה נשמר, ואפשר לבחור אותה שוב.');
   }
 
   private openInspectorFor(npcId: string): void {
@@ -515,9 +541,13 @@ export class Game {
       this.player.update(dt, this.camera, this.blocked, (next, radius) =>
         this.colliders.resolve(next, radius, this.movingObstacles('player')),
       );
+      const grew = this.playerTasks.update(dt, this.player);
+      if (grew && !this.taskMenu) this.ui.showCaption(grew, 1800);
       this.npcs.update(dt, this.gameClock, this.memory);
+      this.homeTasks.update(dt);
       if (!this.npcs.isHeld) this.keepApart();
       this.traffic.update(dt);
+      if (this.zones.current === 'zoo') this.zooLife.update(dt);
       if (this.zones.current === 'home') this.homeLife.maybePlayMess(0.0008 * this.timeAccel);
 
       this.interactCooldown = Math.max(0, this.interactCooldown - dt);
@@ -531,6 +561,9 @@ export class Game {
           this.endSeat(false);
           this.interactCooldown = 0.45;
         }
+      } else if (this.player.taskHold) {
+        this.ui.showHint('[T] משימות — להחליף או להפסיק');
+        this.player.consumeInteract();
       } else {
         this.handleProximity();
         if (!this.blocked && this.interactCooldown <= 0 && this.player.consumeInteract()) {
@@ -663,6 +696,7 @@ export class Game {
     bed?: boolean;
   }): void {
     if (this.player.posing) this.endSeat(false);
+    this.playerTasks.yield(this.player);
     this.player.startPose({
       x: options.x,
       y: options.y,
@@ -701,24 +735,24 @@ export class Game {
         break;
       case 'sitSofa':
         this.beginSeat({
-          x: -4,
-          z: 1.15,
+          x: -1.55,
+          z: 3.35,
           yaw: Math.PI,
-          standX: -1.8,
-          standZ: 1.3,
+          standX: -1.55,
+          standZ: 2.35,
           caption: 'ישבתם על הספה. אפשר לקום עם E או עם מקשי התנועה.',
         });
         this.needs.sleep(8);
         break;
       case 'lieBed':
         this.beginSeat({
-          x: -5.5,
-          y: 0.55,
-          z: -5.35,
+          x: -5.1,
+          y: 0.5,
+          z: -4.55,
           yaw: 0,
           pitch: Math.PI / 2,
-          standX: -3.5,
-          standZ: -4.5,
+          standX: -3.7,
+          standZ: -3.05,
           caption: 'נשכבתם על המיטה.',
           bed: true,
         });
@@ -746,6 +780,7 @@ export class Game {
         this.memory.addStrengths({ friendship: 1, flexibility: 1 });
         break;
       case 'slide':
+        this.playerTasks.yield(this.player);
         this.player.startPose({
           x: 13.3,
           y: 1.05,
@@ -774,6 +809,7 @@ export class Game {
         this.memory.addStrengths({ flexibility: 1 });
         break;
       case 'climb':
+        this.playerTasks.yield(this.player);
         this.player.startPose({
           x: 9.9,
           z: -3.8,
@@ -823,7 +859,7 @@ export class Game {
         this.ui.showCaption('הכלב כשכש בזנב. הרגשתם רגועים יותר.');
         break;
       case 'watchAnimal':
-        this.ui.showCaption(`אתם מסתכלים על ${data.animal}. מרשים!`);
+        this.ui.showCaption(`אתם מסתכלים על ${data.animal}. ${data.doing ?? 'מרשים!'}`);
         this.audio.playSfx('success');
         break;
       case 'zooShow':
@@ -935,7 +971,9 @@ export class Game {
     const diff = this.settings.freePlay ? 'easy' : this.settings.emotionalDifficulty;
     const ok = this.situations.start(id, diff);
     if (!ok || !this.situations.active) return;
+    this.taskMenu = false;
     if (this.player.posing) this.endSeat(false);
+    this.playerTasks.yield(this.player);
     this.blocked = true;
     this.npcs.setHeld(true);
     this.ui.hideOverlay();
@@ -1090,6 +1128,25 @@ export class Game {
     }
   }
 
+  private openTaskMenu(): void {
+    if (!this.running) return;
+    const id = this.selectedPlayerId;
+    const name = this.players.find((player) => player.id === id)?.name ?? 'הדמות';
+    const female = id === 'yael' || id === 'tala';
+    this.taskMenu = true;
+    this.blocked = true;
+    this.ui.showTasks(
+      female ? `מה ${name} תעשה?` : `מה ${name} יעשה?`,
+      tasksForPlayer().map((task) => ({
+        kind: task.kind,
+        title: task.title,
+        note: progressText(task.kind, this.playerTasks.seconds(task.kind)),
+        current: this.playerTasks.kind === task.kind,
+      })),
+      this.playerTasks.active,
+    );
+  }
+
   private handleHud(action: string): void {
     if (action === 'continue') {
       const auto = this.saves.loadAutosave();
@@ -1100,6 +1157,31 @@ export class Game {
       } else {
         this.ui.showCaption('אין שמירה אוטומטית עדיין');
       }
+      return;
+    }
+    if (action === 'tasks') {
+      this.openTaskMenu();
+      return;
+    }
+    if (action === 'task:stop') {
+      this.taskMenu = false;
+      this.ui.hideOverlay();
+      this.blocked = false;
+      this.playerTasks.yield(this.player);
+      this.ui.showCaption('הדמות חזרה ללכת');
+      return;
+    }
+    if (action.startsWith('task:')) {
+      const kind = action.slice(5);
+      const choice = tasksForPlayer().find((task) => task.kind === kind);
+      this.taskMenu = false;
+      this.ui.hideOverlay();
+      this.blocked = false;
+      if (!choice) return;
+      if (this.player.posing) this.endSeat(false);
+      this.playerTasks.start(choice, this.player);
+      const name = this.players.find((player) => player.id === this.selectedPlayerId)?.name ?? 'הדמות';
+      this.ui.showCaption(taskLine(this.selectedPlayerId, name, choice.kind));
       return;
     }
     if (action === 'phone') {
@@ -1302,18 +1384,26 @@ export class Game {
     this.setupSituationCompletion();
     // F key for inspector (also: click on a person)
     window.addEventListener('keydown', (e) => {
-      const key = e.key.toLowerCase();
       const typing = e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLSelectElement;
-      if (key === 'c' && this.running && !this.blocked && !typing) {
+      if (e.code === 'KeyT' && this.running && !typing) {
+        if (this.taskMenu) {
+          this.taskMenu = false;
+          this.ui.hideOverlay();
+          this.blocked = false;
+        } else if (!this.blocked && !this.ui.overlayOpen) {
+          this.openTaskMenu();
+        }
+      }
+      if (e.code === 'KeyC' && this.running && !this.blocked && !typing) {
         const top = this.player.toggleTopDown();
         this.ui.showCaption(top ? 'מבט מלמעלה. Q ו־R מסובבים את המבט.' : 'מבט רגיל מאחורי הדמות.');
       }
-      if (key === 'f' && this.running && !this.blocked) {
+      if (e.code === 'KeyF' && this.running && !this.blocked && !typing) {
         const npc = this.npcs.getNearest(this.player.position, 3);
         if (npc) this.openInspectorFor(npc.id);
       }
       // Eat food from inventory with G
-      if (e.key.toLowerCase() === 'g' && this.running) {
+      if (e.code === 'KeyG' && this.running && !typing) {
         const food = this.inventory.items.find((i) => i.kind === 'food');
         if (food) {
           this.inventory.remove(food.id);
@@ -1325,7 +1415,7 @@ export class Game {
 
     // Load a lightweight neighborhood preview behind title
     this.zones.load('neighborhood', this.scene);
-    this.traffic.setup(this.zones.carPath, this.zones.group);
+    this.traffic.setup(this.zones.carLanes, this.zones.trafficLights, this.zones.group);
   }
 }
 

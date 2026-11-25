@@ -39,6 +39,8 @@ export class UIManager {
   onPhoneAction?: (action: string, payload?: string) => void;
   onShopBuy?: (productId: string, delivery: boolean) => void;
   onHudAction?: (action: string) => void;
+  /** Close a panel that had frozen movement, without cancelling a situation. */
+  onUnblock?: () => void;
   onPoseAction?: (action: 'up' | 'sleep') => void;
   onSettingsChange?: (settings: Partial<GameSettings>) => void;
 
@@ -69,6 +71,7 @@ export class UIManager {
       <div class="inspector panel" id="inspector"></div>
       <div class="phone-panel panel" id="phone"></div>
       <div class="hud-bottom-left" id="hud-buttons">
+        <button class="mini-btn" data-action="tasks">משימות</button>
         <button class="mini-btn" data-action="phone">טלפון</button>
         <button class="mini-btn" data-action="map">מפה</button>
         <button class="mini-btn" data-action="goals">יעדים</button>
@@ -315,6 +318,51 @@ export class UIManager {
     });
   }
 
+  get overlayOpen(): boolean {
+    return !this.overlay.classList.contains('hidden');
+  }
+
+  showTasks(
+    heading: string,
+    tasks: Array<{ kind: string; title: string; note: string | null; current: boolean }>,
+    canStop: boolean,
+  ): void {
+    this.overlay.className = 'overlay';
+    this.overlay.innerHTML = `
+      <div class="panel task-panel">
+        <h2>${heading}</h2>
+        <p>בחרו משימה. הדמות תמשיך בה עד שתבחרו משימה אחרת. משחקי הבנייה גדלים כל עוד משחקים.</p>
+        <div class="task-grid">
+          ${tasks
+            .map(
+              (task) => `<button data-task="${task.kind}" class="${task.current ? 'selected' : ''}">
+                <span>${task.title}</span>
+                ${task.note ? `<small>${task.note}</small>` : ''}
+              </button>`,
+            )
+            .join('')}
+        </div>
+        <div class="btn-row">
+          ${canStop ? '<button class="ghost" id="stop-task">להפסיק וללכת</button>' : ''}
+          <button class="primary" id="close-tasks">סגור</button>
+        </div>
+      </div>
+    `;
+    this.overlay.querySelectorAll('[data-task]').forEach((button) => {
+      button.addEventListener('click', () => {
+        const kind = (button as HTMLElement).dataset.task;
+        if (kind) this.onHudAction?.(`task:${kind}`);
+      });
+    });
+    this.overlay.querySelector('#stop-task')?.addEventListener('click', () => {
+      this.onHudAction?.('task:stop');
+    });
+    this.overlay.querySelector('#close-tasks')!.addEventListener('click', () => {
+      this.hideOverlay();
+      this.onUnblock?.();
+    });
+  }
+
   hideOverlay(): void {
     this.overlay.classList.add('hidden');
     this.overlay.innerHTML = '';
@@ -407,7 +455,10 @@ export class UIManager {
         this.onShopBuy?.(el.dataset.buy!, el.dataset.delivery === '1');
       });
     });
-    this.overlay.querySelector('#close-shop')!.addEventListener('click', () => this.hideOverlay());
+    this.overlay.querySelector('#close-shop')!.addEventListener('click', () => {
+      this.hideOverlay();
+      this.onUnblock?.();
+    });
     void strengths;
   }
 
@@ -601,7 +652,10 @@ export class UIManager {
     this.overlay.querySelectorAll('[data-role]').forEach((b) =>
       b.addEventListener('click', () => this.onHudAction?.(`recess:${(b as HTMLElement).dataset.role}`)),
     );
-    this.overlay.querySelector('#close-recess')!.addEventListener('click', () => this.hideOverlay());
+    this.overlay.querySelector('#close-recess')!.addEventListener('click', () => {
+      this.hideOverlay();
+      this.onUnblock?.();
+    });
   }
 
   setBreatheVisible(visible: boolean): void {

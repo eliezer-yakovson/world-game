@@ -24,6 +24,9 @@ export class PlayerController {
   private idleAction?: THREE.AnimationAction;
   private emoteAction?: THREE.AnimationAction;
   private moving = false;
+  /** While set, the player stays on a chosen chore instead of walking. */
+  taskHold = false;
+  private heldKey = '';
   private fallbackColor = 0x3d9b8f;
   private pose: {
     origin: THREE.Vector3;
@@ -128,9 +131,39 @@ export class PlayerController {
     this.idleAction?.reset().fadeIn(0.15).play();
   }
 
+  /** Plays a chore clip and keeps it playing. The same clip is not restarted. */
+  playHeldClip(kind: string, loop: boolean): void {
+    const key = `${kind}:${loop}`;
+    if (this.heldKey === key) return;
+    this.heldKey = key;
+    if (kind === 'walk' && this.walkAction) {
+      this.emoteAction?.fadeOut(0.15);
+      this.idleAction?.fadeOut(0.15);
+      this.walkAction.reset().setLoop(THREE.LoopRepeat, Infinity).fadeIn(0.15).play();
+      return;
+    }
+    if (kind === 'idle' && loop && this.idleAction) {
+      this.emoteAction?.fadeOut(0.15);
+      this.walkAction?.fadeOut(0.15);
+      this.idleAction.reset().fadeIn(0.15).play();
+      return;
+    }
+    this.playEmote(kind, loop);
+  }
+
+  releaseHold(): void {
+    this.taskHold = false;
+    this.heldKey = '';
+    if (this.mixer) this.playIdle();
+  }
+
   toggleTopDown(): boolean {
     this.topDown = !this.topDown;
     return this.topDown;
+  }
+
+  get cameraYaw(): number {
+    return this.yaw;
   }
 
   get posing(): boolean {
@@ -187,7 +220,9 @@ export class PlayerController {
   }
 
   private moveKeysHeld(): boolean {
-    return ['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'].some((key) => this.keys.has(key));
+    return ['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].some((key) =>
+      this.keys.has(key),
+    );
   }
 
   dispose(): void {
@@ -196,25 +231,27 @@ export class PlayerController {
   }
 
   private onKeyDown = (e: KeyboardEvent) => {
-    const key = e.key.toLowerCase();
-    this.keys.add(key);
-    if (key === 'e' || key === 'enter') this.interactLatch = true;
+    if (isTypingTarget(e)) return;
+    // Physical key, so a Hebrew layout still moves with the WASD keys.
+    this.keys.add(e.code);
+    if (e.code === 'KeyE' || e.code === 'Enter' || e.code === 'NumpadEnter') this.interactLatch = true;
   };
 
   private onKeyUp = (e: KeyboardEvent) => {
-    this.keys.delete(e.key.toLowerCase());
+    this.keys.delete(e.code);
   };
 
   get interactPressed(): boolean {
-    return this.keys.has('e') || this.keys.has('enter');
+    return this.keys.has('KeyE') || this.keys.has('Enter') || this.keys.has('NumpadEnter');
   }
 
   consumeInteract(): boolean {
-    const held = this.keys.has('e') || this.keys.has('enter');
+    const held = this.interactPressed;
     if (!held && !this.interactLatch) return false;
     this.interactLatch = false;
-    this.keys.delete('e');
-    this.keys.delete('enter');
+    this.keys.delete('KeyE');
+    this.keys.delete('Enter');
+    this.keys.delete('NumpadEnter');
     return true;
   }
 
@@ -238,6 +275,16 @@ export class PlayerController {
       }
     }
 
+    if (this.taskHold) {
+      if (!blocked) {
+        if (this.keys.has('KeyQ')) this.yaw += dt * 1.5 * this.sensitivity;
+        if (this.keys.has('KeyR')) this.yaw -= dt * 1.5 * this.sensitivity;
+        this.frameCamera(dt, camera);
+      }
+      this.mixer?.update(dt);
+      return;
+    }
+
     if (blocked) {
       this.mixer?.update(dt);
       return;
@@ -245,14 +292,14 @@ export class PlayerController {
 
     let inputX = 0;
     let inputZ = 0;
-    if (this.keys.has('w') || this.keys.has('arrowup')) inputZ -= 1;
-    if (this.keys.has('s') || this.keys.has('arrowdown')) inputZ += 1;
-    if (this.keys.has('a') || this.keys.has('arrowright')) inputX += 1;
-    if (this.keys.has('d') || this.keys.has('arrowleft')) inputX -= 1;
-    if (this.keys.has('q')) this.yaw += dt * 1.5 * this.sensitivity;
-    if (this.keys.has('r')) this.yaw -= dt * 1.5 * this.sensitivity;
+    if (this.keys.has('KeyW') || this.keys.has('ArrowUp')) inputZ -= 1;
+    if (this.keys.has('KeyS') || this.keys.has('ArrowDown')) inputZ += 1;
+    if (this.keys.has('KeyA') || this.keys.has('ArrowRight')) inputX += 1;
+    if (this.keys.has('KeyD') || this.keys.has('ArrowLeft')) inputX -= 1;
+    if (this.keys.has('KeyQ')) this.yaw += dt * 1.5 * this.sensitivity;
+    if (this.keys.has('KeyR')) this.yaw -= dt * 1.5 * this.sensitivity;
 
-    const running = this.keys.has('shift');
+    const running = this.keys.has('ShiftLeft') || this.keys.has('ShiftRight');
     let moveSpeed = this.speed * (running ? this.runMultiplier : 1);
     if (this.hasBike) moveSpeed *= 1.8;
     else if (this.hasScooter) moveSpeed *= 1.5;
@@ -339,4 +386,9 @@ export class PlayerController {
     camera.position.lerp(desired, 1 - Math.pow(0.001, dt));
     camera.lookAt(this.position.x, this.position.y + 1.2, this.position.z);
   }
+}
+
+function isTypingTarget(event: KeyboardEvent): boolean {
+  const target = event.target;
+  return target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement;
 }

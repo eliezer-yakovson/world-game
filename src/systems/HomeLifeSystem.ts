@@ -25,6 +25,12 @@ export class HomeLifeSystem {
     bus.emit('mess-changed', this.messLevel);
   }
 
+  decreaseMess(amount = 1): void {
+    this.messLevel = Math.max(0, this.messLevel - amount);
+    this.applyMessVisual();
+    bus.emit('mess-changed', this.messLevel);
+  }
+
   maybePlayMess(chance = 0.002): boolean {
     if (Math.random() > chance) return false;
     this.increaseMess(1);

@@ -64,8 +64,32 @@ export class ZooLifeSystem {
       pet.anchor.rotation.order = 'YXZ';
       pet.anchor.rotation.y = pose.yaw;
       pet.anchor.rotation.x = pose.pitch;
+      this.plantFeet(pet.anchor);
     }
     this.keepApart();
+  }
+
+  /** A nod pitches the whole body, so lift it until the lowest point is back on the ground. */
+  private plantFeet(anchor: THREE.Object3D): void {
+    anchor.updateWorldMatrix(true, true);
+    let minY = Infinity;
+    anchor.traverse((child) => {
+      const mesh = child as THREE.Mesh;
+      if (!mesh.isMesh || !mesh.visible || !mesh.geometry) return;
+      if (!mesh.geometry.boundingBox) mesh.geometry.computeBoundingBox();
+      const box = mesh.geometry.boundingBox;
+      if (!box) return;
+      const e = mesh.matrixWorld.elements;
+      for (const x of [box.min.x, box.max.x]) {
+        for (const y of [box.min.y, box.max.y]) {
+          for (const z of [box.min.z, box.max.z]) {
+            const wy = e[1] * x + e[5] * y + e[9] * z + e[13];
+            if (wy < minY) minY = wy;
+          }
+        }
+      }
+    });
+    if (minY < -0.02) anchor.position.y -= minY;
   }
 
   private keepApart(): void {

@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { lookFor, type CharacterLook } from './characterLooks';
+import { dressCharacter } from './outfits';
 
 const TOP_HAT_MIN_Y = 2.95;
 
@@ -33,6 +34,7 @@ export function presentCharacter(root: THREE.Object3D, id: string): void {
     if (isHat && geometryMinY(mesh) > TOP_HAT_MIN_Y) mesh.visible = false;
     if (isFace) replaceFaceWithEyes(mesh);
   });
+  dressCharacter(root, id);
 }
 
 function colorFor(name: string, look: CharacterLook): number | undefined {

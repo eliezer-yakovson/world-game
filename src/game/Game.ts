@@ -727,24 +727,24 @@ export class Game {
         break;
       case 'sitSofa':
         this.beginSeat({
-          x: -4,
-          z: 1.15,
+          x: -1.55,
+          z: 3.35,
           yaw: Math.PI,
-          standX: -1.8,
-          standZ: 1.3,
+          standX: -1.55,
+          standZ: 2.35,
           caption: 'ישבתם על הספה. אפשר לקום עם E או עם מקשי התנועה.',
         });
         this.needs.sleep(8);
         break;
       case 'lieBed':
         this.beginSeat({
-          x: -5.5,
-          y: 0.55,
-          z: -5.35,
+          x: -5.1,
+          y: 0.5,
+          z: -4.55,
           yaw: 0,
           pitch: Math.PI / 2,
-          standX: -3.5,
-          standZ: -4.5,
+          standX: -3.7,
+          standZ: -3.05,
           caption: 'נשכבתם על המיטה.',
           bed: true,
         });

@@ -19,6 +19,13 @@ export interface NpcActor {
   walkAction?: THREE.AnimationAction;
   idleAction?: THREE.AnimationAction;
   emoteAction?: THREE.AnimationAction;
+  /** Home chores own this actor: steering must not drag them off a task. */
+  busy?: boolean;
+  /** Standing on a task spot. Collision should leave them there. */
+  anchored?: boolean;
+  /** What they say if the player talks to them mid-task. */
+  statusLine?: string;
+  clipKey?: string;
 }
 
 export class NpcManager {
@@ -113,19 +120,84 @@ export class NpcManager {
   }
 
   playEmote(id: string, kind: string): void {
+    this.playClip(id, kind, false);
+  }
+
+  /** Looping or one-shot clip. Repeating the same request does not restart it. */
+  playClip(id: string, kind: string, loop: boolean): void {
     const actor = this.actors.find((item) => item.id === id);
     if (!actor?.mixer) return;
+    const key = `${kind}:${loop ? 1 : 0}`;
+    if (actor.clipKey === key) return;
+
+    if (kind === 'walk' && actor.walkAction) {
+      actor.emoteAction?.fadeOut(0.15);
+      actor.idleAction?.fadeOut(0.15);
+      actor.walkAction.reset().fadeIn(0.15).play();
+      actor.clipKey = key;
+      return;
+    }
+    if (kind === 'idle' && actor.idleAction) {
+      actor.emoteAction?.fadeOut(0.15);
+      actor.walkAction?.fadeOut(0.15);
+      actor.idleAction.reset().fadeIn(0.15).play();
+      actor.clipKey = key;
+      return;
+    }
+
     const clip = pickClip(actor.clips, kind);
     if (!clip) return;
     actor.emoteAction?.fadeOut(0.1);
-    const action = actor.mixer.clipAction(clip);
-    action.reset();
-    action.setLoop(THREE.LoopOnce, 1);
-    action.clampWhenFinished = true;
-    action.fadeIn(0.12).play();
-    actor.emoteAction = action;
     actor.walkAction?.fadeOut(0.1);
     actor.idleAction?.fadeOut(0.1);
+    const action = actor.mixer.clipAction(clip);
+    action.reset();
+    action.setLoop(loop ? THREE.LoopRepeat : THREE.LoopOnce, loop ? Infinity : 1);
+    action.clampWhenFinished = !loop;
+    action.fadeIn(0.12).play();
+    actor.emoteAction = action;
+    actor.clipKey = key;
+  }
+
+  /** Walk toward a chore. Collision may still nudge them. */
+  moveBusy(id: string, x: number, z: number, yaw: number): void {
+    const actor = this.actors.find((item) => item.id === id);
+    if (!actor) return;
+    actor.busy = true;
+    actor.anchored = false;
+    actor.mesh.position.set(x, 0, z);
+    actor.mesh.rotation.y = yaw;
+    actor.vehicle.position.set(x, 0, z);
+    actor.vehicle.velocity.set(0, 0, 0);
+  }
+
+  /** Stand on the task spot and ignore steering. */
+  holdAt(id: string, x: number, z: number, yaw: number): void {
+    const actor = this.actors.find((item) => item.id === id);
+    if (!actor) return;
+    actor.busy = true;
+    actor.anchored = true;
+    actor.mesh.position.set(x, 0, z);
+    actor.mesh.rotation.y = yaw;
+    actor.vehicle.position.set(x, 0, z);
+    actor.vehicle.velocity.set(0, 0, 0);
+  }
+
+  releaseActor(id: string): void {
+    const actor = this.actors.find((item) => item.id === id);
+    if (!actor) return;
+    actor.busy = false;
+    actor.anchored = false;
+    actor.statusLine = undefined;
+    actor.clipKey = undefined;
+    actor.emoteAction?.fadeOut(0.15);
+    actor.walkAction?.fadeOut(0.15);
+    if (actor.idleAction && !actor.idleAction.isRunning()) actor.idleAction.reset().fadeIn(0.15).play();
+  }
+
+  setStatus(id: string, line: string | null): void {
+    const actor = this.actors.find((item) => item.id === id);
+    if (actor) actor.statusLine = line ?? undefined;
   }
 
   update(dt: number, clock: GameClock, memory: MemoryStore): void {
@@ -133,8 +205,10 @@ export class NpcManager {
     if (!this.isHeld) this.entityManager.update(dt);
 
     for (const actor of this.actors) {
-      if (!this.isHeld) actor.mesh.position.set(actor.vehicle.position.x, 0, actor.vehicle.position.z);
-      const moving = !this.isHeld && actor.vehicle.getSpeed() > 0.15;
+      if (!this.isHeld && !actor.busy) {
+        actor.mesh.position.set(actor.vehicle.position.x, 0, actor.vehicle.position.z);
+      }
+      const moving = !this.isHeld && !actor.busy && actor.vehicle.getSpeed() > 0.15;
       if (moving) {
         actor.mesh.lookAt(
           actor.vehicle.position.x + actor.vehicle.velocity.x,
@@ -143,12 +217,14 @@ export class NpcManager {
         );
       }
       if (actor.mixer) {
-        if (moving && actor.walkAction && !actor.walkAction.isRunning()) {
-          actor.idleAction?.fadeOut(0.2);
-          actor.walkAction.reset().fadeIn(0.2).play();
-        } else if (!this.isHeld && !moving && actor.idleAction && !actor.idleAction.isRunning()) {
-          actor.walkAction?.fadeOut(0.2);
-          actor.idleAction.reset().fadeIn(0.2).play();
+        if (!actor.busy) {
+          if (moving && actor.walkAction && !actor.walkAction.isRunning()) {
+            actor.idleAction?.fadeOut(0.2);
+            actor.walkAction.reset().fadeIn(0.2).play();
+          } else if (!this.isHeld && !moving && actor.idleAction && !actor.idleAction.isRunning()) {
+            actor.walkAction?.fadeOut(0.2);
+            actor.idleAction.reset().fadeIn(0.2).play();
+          }
         }
         actor.mixer.update(dt);
       }
@@ -176,12 +252,14 @@ export class NpcManager {
   talkTo(actor: NpcActor, memory: MemoryStore, clock: GameClock): string {
     const trust = memory.trust[actor.id] ?? 50;
     const mood = memory.moods[actor.id] ?? 'neutral';
-    let line = `שלום! אני ${actor.profile.name}.`;
-    if (mood === 'happy') line = `${actor.profile.name}: היי! כיף לראות אותך.`;
-    if (mood === 'angry') line = `${actor.profile.name}: עכשיו קצת קשה לי…`;
-    if (mood === 'sad') line = `${actor.profile.name}: היי… יום לא פשוט.`;
-    if (trust > 70) line += ' תמיד כיף לדבר איתך.';
-    if (trust < 30) line += ' בוא נדבר אחר כך, בסדר?';
+    let line = actor.statusLine ?? `שלום! אני ${actor.profile.name}.`;
+    if (!actor.statusLine) {
+      if (mood === 'happy') line = `${actor.profile.name}: היי! כיף לראות אותך.`;
+      if (mood === 'angry') line = `${actor.profile.name}: עכשיו קצת קשה לי…`;
+      if (mood === 'sad') line = `${actor.profile.name}: היי… יום לא פשוט.`;
+      if (trust > 70) line += ' תמיד כיף לדבר איתך.';
+      if (trust < 30) line += ' בוא נדבר אחר כך, בסדר?';
+    }
 
     memory.addDiary(actor.id, clock.timeLabel, `דיבר עם השחקן`);
     memory.adjustFriendship(actor.id, 1);

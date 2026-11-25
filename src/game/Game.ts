@@ -27,6 +27,7 @@ import { StrengthEconomy } from '../systems/StrengthEconomy';
 import { FriendshipSystem } from '../systems/FriendshipSystem';
 import { TrafficSystem } from '../systems/TrafficSystem';
 import { HomeLifeSystem } from '../systems/HomeLifeSystem';
+import { HomeTaskDirector } from '../characters/homeTasks';
 import { AudioDirector } from '../audio/AudioDirector';
 import { UIManager } from '../ui/UIManager';
 import { STRENGTH_LABELS } from '../core/types';
@@ -66,6 +67,7 @@ export class Game {
   private npcLastPos = new Map<string, THREE.Vector3>();
   private zoneReady = false;
   private homeLife = new HomeLifeSystem();
+  private homeTasks = new HomeTaskDirector(this.npcs, () => this.homeLife.decreaseMess(1));
   private audio = new AudioDirector();
   private saves = new SaveSystem();
   private ui: UIManager;
@@ -342,6 +344,10 @@ export class Game {
     const seen = new Set<string>();
     for (const actor of this.npcs.actors) {
       seen.add(actor.id);
+      if (actor.anchored) {
+        this.npcLastPos.set(actor.id, actor.mesh.position.clone());
+        continue;
+      }
       const desired = actor.mesh.position.clone();
       const from = this.npcLastPos.get(actor.id) ?? desired;
       const resolved = this.colliders.slide(from, desired, 0.5, this.movingObstacles(actor.id));
@@ -386,6 +392,7 @@ export class Game {
 
   private goToZone(zone: ZoneId): void {
     if (this.player.posing) this.endSeat(false);
+    this.homeTasks.end();
     this.unlockedZones = unlockZone(this.unlockedZones, zone);
     const built = this.zones.load(zone, this.scene);
     this.player.position.copy(built.spawn);
@@ -403,6 +410,7 @@ export class Game {
       this.homeLife.bindToys(this.zones.group);
       this.applyHomeLayout();
     }
+    if (zone === 'home' || zone === 'home_blue' || zone === 'home_yellow') this.homeTasks.begin();
     const indoor = zone === 'home' || zone === 'home_blue' || zone === 'home_yellow' || zone === 'shop';
     this.player.cameraDistance = indoor ? 6.2 : zone === 'school' ? 7 : 9;
     this.player.cameraHeight = indoor ? 3.6 : zone === 'school' ? 4.2 : 5.5;
@@ -519,6 +527,7 @@ export class Game {
         this.colliders.resolve(next, radius, this.movingObstacles('player')),
       );
       this.npcs.update(dt, this.gameClock, this.memory);
+      this.homeTasks.update(dt);
       if (!this.npcs.isHeld) this.keepApart();
       this.traffic.update(dt);
       if (this.zones.current === 'home') this.homeLife.maybePlayMess(0.0008 * this.timeAccel);

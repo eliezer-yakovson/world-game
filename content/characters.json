@@ -1,0 +1,219 @@
+{
+  "players": [
+    {
+      "id": "yael",
+      "name": "יעל",
+      "description": "חברותית ואמיצה. גרה בבית הירוק עם משפחתה, לומדת בכיתה ד׳.",
+      "homeId": "home-green",
+      "schoolClass": "ד׳-1",
+      "familyIds": ["mom", "dad", "brother"],
+      "friendIds": ["noam", "maya"],
+      "strengths": {
+        "speech": 4,
+        "courage": 5,
+        "flexibility": 3,
+        "responsibility": 3,
+        "restraint": 2,
+        "friendship": 5,
+        "creativity": 3
+      },
+      "color": 3769568
+    },
+    {
+      "id": "ori",
+      "name": "אורי",
+      "description": "גמיש ויצירתי. אוהב לסדר דברים ולחשוב על פתרונות חדשים.",
+      "homeId": "home-blue",
+      "schoolClass": "ד׳-1",
+      "familyIds": ["mom", "dad", "sister"],
+      "friendIds": ["maya", "dani"],
+      "strengths": {
+        "speech": 3,
+        "courage": 3,
+        "flexibility": 5,
+        "responsibility": 4,
+        "restraint": 4,
+        "friendship": 3,
+        "creativity": 5
+      },
+      "color": 3648478
+    },
+    {
+      "id": "tala",
+      "name": "טלה",
+      "description": "אחראית ומדברת יפה. מתביישת לפעמים אבל לומדת לעצור ולנשום.",
+      "homeId": "home-yellow",
+      "schoolClass": "ד׳-2",
+      "familyIds": ["mom", "dad"],
+      "friendIds": ["noam", "roni"],
+      "strengths": {
+        "speech": 5,
+        "courage": 2,
+        "flexibility": 4,
+        "responsibility": 5,
+        "restraint": 4,
+        "friendship": 4,
+        "creativity": 3
+      },
+      "color": 14724776
+    },
+    {
+      "id": "roni",
+      "name": "רוני",
+      "description": "אוהב משחקי חצר ואופניים. צריך לתרגל איפוק כשמשהו נשבר.",
+      "homeId": "home-green",
+      "schoolClass": "ד׳-2",
+      "familyIds": ["mom", "dad", "brother"],
+      "friendIds": ["dani", "yael"],
+      "strengths": {
+        "speech": 2,
+        "courage": 5,
+        "flexibility": 3,
+        "responsibility": 2,
+        "restraint": 2,
+        "friendship": 4,
+        "creativity": 4
+      },
+      "color": 13382451
+    }
+  ],
+  "npcs": [
+    {
+      "id": "mom",
+      "name": "אמא",
+      "role": "הורה",
+      "home": "הבית של המשפחה",
+      "workOrSchool": "עבודה מהבית / משרד",
+      "traits": ["חמה", "סבלנית", "מארגנת"],
+      "strengths": { "responsibility": 8, "speech": 6 },
+      "color": 14684511,
+      "mood": "happy",
+      "trustTowardPlayer": 70
+    },
+    {
+      "id": "dad",
+      "name": "אבא",
+      "role": "הורה",
+      "home": "הבית של המשפחה",
+      "workOrSchool": "עבודה בעיר",
+      "traits": ["מצחיק", "רגוע", "אוהב לבשל"],
+      "strengths": { "flexibility": 7, "friendship": 6 },
+      "color": 4550832,
+      "mood": "neutral",
+      "trustTowardPlayer": 65
+    },
+    {
+      "id": "brother",
+      "name": "אח קטן",
+      "role": "אח",
+      "home": "הבית של המשפחה",
+      "workOrSchool": "גן / כיתה א׳",
+      "traits": ["שובב", "יצירתי", "אוהב צעצועים"],
+      "strengths": { "creativity": 7, "courage": 5 },
+      "color": 16750848,
+      "mood": "excited",
+      "trustTowardPlayer": 60,
+      "friendship": 55
+    },
+    {
+      "id": "sister",
+      "name": "אחות",
+      "role": "אחות",
+      "home": "הבית של המשפחה",
+      "workOrSchool": "חטיבה",
+      "traits": ["חריצה", "ישירה"],
+      "strengths": { "speech": 7, "responsibility": 6 },
+      "color": 13369548,
+      "mood": "neutral",
+      "trustTowardPlayer": 55,
+      "friendship": 50
+    },
+    {
+      "id": "teacher",
+      "name": "המורה נועה",
+      "role": "מורה",
+      "home": "מחוץ לשכונה",
+      "workOrSchool": "בית ספר — כיתה ד׳",
+      "traits": ["הוגנת", "מעודדת", "ברורה"],
+      "strengths": { "speech": 8, "responsibility": 8 },
+      "color": 8431835,
+      "mood": "neutral",
+      "trustTowardPlayer": 50
+    },
+    {
+      "id": "shopkeeper",
+      "name": "מוטי מהמכולת",
+      "role": "מוכר",
+      "home": "מעל החנות",
+      "workOrSchool": "המכולת",
+      "traits": ["ידידותי", "ממהר", "הוגן"],
+      "strengths": { "speech": 5, "responsibility": 6 },
+      "color": 11763712,
+      "mood": "happy",
+      "trustTowardPlayer": 40
+    },
+    {
+      "id": "noam",
+      "name": "נועם",
+      "role": "חבר",
+      "home": "בית כחול ברחוב",
+      "workOrSchool": "כיתה ד׳-1",
+      "traits": ["ספורטיבי", "נאמן"],
+      "strengths": { "courage": 6, "friendship": 7 },
+      "color": 3455446,
+      "mood": "happy",
+      "trustTowardPlayer": 45,
+      "friendship": 40
+    },
+    {
+      "id": "maya",
+      "name": "מאיה",
+      "role": "חברה",
+      "home": "בית צהוב ברחוב",
+      "workOrSchool": "כיתה ד׳-1",
+      "traits": ["יצירתית", "רגישה"],
+      "strengths": { "creativity": 8, "speech": 5 },
+      "color": 15239424,
+      "mood": "neutral",
+      "trustTowardPlayer": 48,
+      "friendship": 42
+    },
+    {
+      "id": "dani",
+      "name": "דני",
+      "role": "חבר",
+      "home": "ליד הפארק",
+      "workOrSchool": "כיתה ד׳-2",
+      "traits": ["מצחיק", "לפעמים אימפולסיבי"],
+      "strengths": { "courage": 5, "flexibility": 4 },
+      "color": 5672450,
+      "mood": "excited",
+      "trustTowardPlayer": 35,
+      "friendship": 30
+    },
+    {
+      "id": "neighbor",
+      "name": "דודה רחל",
+      "role": "שכנה",
+      "home": "הבית הצהוב",
+      "workOrSchool": "גינה ופנסיה",
+      "traits": ["סקרנית", "אוהבת פרחים"],
+      "strengths": { "responsibility": 5, "friendship": 6 },
+      "color": 12814520,
+      "mood": "happy",
+      "trustTowardPlayer": 40
+    },
+    {
+      "id": "zookeeper",
+      "name": "המטפלת מיכל",
+      "role": "מטפלת בגן חיות",
+      "home": "ליד גן החיות",
+      "workOrSchool": "גן החיות",
+      "traits": ["רגועה", "אוהבת חיות"],
+      "strengths": { "responsibility": 7, "restraint": 6 },
+      "color": 4567330,
+      "mood": "happy",
+      "trustTowardPlayer": 35
+    }
+  ]
+}

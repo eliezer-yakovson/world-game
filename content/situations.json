@@ -1,0 +1,426 @@
+[
+  {
+    "id": "spilled_drink",
+    "title": "משקה שנשפך",
+    "location": "home",
+    "description": "הכוס התהפכה על שולחן המטבח. המשקה זורם לאט לכיוון המחברת.",
+    "emotion": "אתה מרגיש לחץ קטן בבטן — קצת בושה וקצת דאגה.",
+    "tense": true,
+    "fatigueNote": "אתה עייף עכשיו, ולכן קשה יותר להתאפק.",
+    "hungerNote": "אתה רעב, והרעש הקטן הזה מרגיז יותר מהרגיל.",
+    "choices": [
+      {
+        "id": "yell",
+        "label": "להתעצבן ולהאשים מישהו",
+        "impulsive": true,
+        "awards": { "speech": 1 },
+        "trustDelta": { "mom": -5, "brother": -8 },
+        "moodDelta": { "mom": "sad", "brother": "angry" },
+        "followUpText": "הקול שלך עלה. אמא נאנחת, והאח הקטן מתכווץ.",
+        "animation": "stomp"
+      },
+      {
+        "id": "freeze",
+        "label": "לקפוא ולא לעשות כלום",
+        "impulsive": true,
+        "awards": {},
+        "followUpText": "המשקה ממשיך לזרום. אף אחד לא בטוח מה לעשות.",
+        "animation": "idle"
+      },
+      {
+        "id": "clean",
+        "label": "להביא מטלית ולנקות יחד",
+        "requiresBreathe": true,
+        "awards": { "responsibility": 3, "restraint": 2 },
+        "trustDelta": { "mom": 8, "brother": 5 },
+        "moodDelta": { "mom": "happy" },
+        "followUpText": "אתה מנקה במהירות. אמא מחייכת: \"כל הכבוד שטיפלת בזה.\"",
+        "animation": "clean"
+      },
+      {
+        "id": "ask_help",
+        "label": "לבקש עזרה בשקט מאמא",
+        "requiresBreathe": true,
+        "awards": { "speech": 2, "flexibility": 2 },
+        "trustDelta": { "mom": 6 },
+        "followUpText": "אתה מבקש עזרה. אמא עוזרת, ואתם מסיימים מהר.",
+        "animation": "talk"
+      }
+    ],
+    "summaryTemplate": "סיימת את סיטואציית המשקה שנשפך."
+  },
+  {
+    "id": "class_question",
+    "title": "שאלה בכיתה",
+    "location": "school",
+    "description": "המורה נועה שואלת שאלה ומסתכלת לכיוון שלך. כמה ילדים מסתכלים.",
+    "emotion": "אתה מרגיש בושה קלה ודפיקות לב — רוצה לענות אבל גם לפחד לטעות.",
+    "tense": true,
+    "choices": [
+      {
+        "id": "hide",
+        "label": "להסתיר את הראש במחברת",
+        "impulsive": true,
+        "awards": {},
+        "trustDelta": { "teacher": -2 },
+        "followUpText": "המורה עוברת הלאה. אתה מרגיש הקלה מעורבת באכזבה.",
+        "animation": "hide"
+      },
+      {
+        "id": "guess_loud",
+        "label": "לצעוק תשובה בלי לחשוב",
+        "impulsive": true,
+        "awards": { "courage": 1 },
+        "followUpText": "התשובה לא מדויקת. מישהו צוחק בלחישה.",
+        "animation": "talk"
+      },
+      {
+        "id": "answer",
+        "label": "לנשום ולענות בקול ברור",
+        "requiresBreathe": true,
+        "awards": { "courage": 3, "speech": 3 },
+        "trustDelta": { "teacher": 10, "noam": 3 },
+        "moodDelta": { "teacher": "happy" },
+        "followUpText": "ענית. המורה מהנהנת: \"יפה מאוד.\"",
+        "animation": "talk"
+      },
+      {
+        "id": "ask_friend",
+        "label": "ללחוש לנועם ולבקש רמז",
+        "requiresBreathe": true,
+        "awards": { "friendship": 2, "flexibility": 2 },
+        "trustDelta": { "noam": 5 },
+        "followUpText": "נועם לוחש רמז. אתה עונה נכון בעזרתו.",
+        "animation": "whisper"
+      }
+    ],
+    "summaryTemplate": "סיימת את הרגע בכיתה."
+  },
+  {
+    "id": "park_argument",
+    "title": "ויכוח בגינה",
+    "location": "park",
+    "description": "דני אומר שהכדור שלו, ונועם לא מסכים. המשחק נעצר.",
+    "emotion": "אתה מרגיש כעס קטן ואי-נוחות — כולם מחכים שמישהו יפתור.",
+    "tense": true,
+    "choices": [
+      {
+        "id": "take_side",
+        "label": "לצעוק שדני צודק",
+        "impulsive": true,
+        "awards": { "courage": 1 },
+        "trustDelta": { "dani": 5, "noam": -8 },
+        "moodDelta": { "noam": "angry" },
+        "followUpText": "נועם עוזב בכעס. דני מחייך, אבל האווירה כבדה.",
+        "animation": "stomp"
+      },
+      {
+        "id": "walk_away",
+        "label": "לעזוב את המקום",
+        "impulsive": true,
+        "awards": {},
+        "followUpText": "אתה הולך. הוויכוח נמשך בלי פתרון.",
+        "animation": "walk"
+      },
+      {
+        "id": "mediate",
+        "label": "להציע משחק חדש עם תורות",
+        "requiresBreathe": true,
+        "awards": { "flexibility": 3, "speech": 2, "friendship": 2 },
+        "trustDelta": { "dani": 6, "noam": 6 },
+        "moodDelta": { "dani": "happy", "noam": "happy" },
+        "followUpText": "כולם מסכימים על תורות. המשחק חוזר.",
+        "animation": "talk"
+      },
+      {
+        "id": "share",
+        "label": "להציע להביא כדור נוסף מהבית",
+        "requiresBreathe": true,
+        "awards": { "responsibility": 2, "friendship": 3 },
+        "trustDelta": { "dani": 4, "noam": 4 },
+        "followUpText": "הרעיון מרגיע את שניהם. הם מחכים לך בפארק.",
+        "animation": "talk"
+      }
+    ],
+    "summaryTemplate": "הוויכוח בגינה הסתיים."
+  },
+  {
+    "id": "broken_item",
+    "title": "המוצר נשבר בדרך",
+    "location": "neighborhood",
+    "description": "השקית נקרעה. המוצר שנשאת נפל ונשבר על המדרכה.",
+    "emotion": "אתה מרגיש תסכול חזק — כעס על עצמך וקצת בושה.",
+    "tense": true,
+    "choices": [
+      {
+        "id": "kick",
+        "label": "לבעוט בשקית בכעס",
+        "impulsive": true,
+        "awards": {},
+        "followUpText": "הבעיטה לא עוזרת. השברים מתפזרים יותר.",
+        "animation": "stomp"
+      },
+      {
+        "id": "cry",
+        "label": "לבכות במקום",
+        "impulsive": true,
+        "awards": {},
+        "followUpText": "הדמעות יוצאות. עובר אורח מסתכל לרגע.",
+        "animation": "sad"
+      },
+      {
+        "id": "breathe_return",
+        "label": "לאסוף, לחזור לחנות ולהסביר",
+        "requiresBreathe": true,
+        "awards": { "restraint": 3, "speech": 2, "responsibility": 2 },
+        "trustDelta": { "shopkeeper": 8 },
+        "followUpText": "מוטי מקשיב ואומר שאפשר להחליף חלקית. למדת משהו חשוב.",
+        "animation": "talk"
+      },
+      {
+        "id": "call_parent",
+        "label": "להתקשר לאמא ולבקש עצה",
+        "requiresBreathe": true,
+        "awards": { "speech": 2, "flexibility": 2 },
+        "trustDelta": { "mom": 5 },
+        "followUpText": "אמא עוזרת לך לחשוב על הצעד הבא בלי להאשים.",
+        "animation": "phone"
+      }
+    ],
+    "summaryTemplate": "התמודדת עם השבירה בדרך הביתה."
+  },
+  {
+    "id": "tidy_request",
+    "title": "בקשה לסדר",
+    "location": "home",
+    "description": "הבית מלא צעצועים. אבא מבקש לעזור לאסוף לפני השינה.",
+    "emotion": "אתה מרגיש עייפות וקצת התנגדות — רוצה להמשיך לשחק.",
+    "tense": false,
+    "fatigueNote": "אתה ממש עייף עכשיו, ולכן קשה יותר לקחת אחריות.",
+    "choices": [
+      {
+        "id": "refuse",
+        "label": "להגיד \"אחר כך\" וללכת לחדר",
+        "impulsive": true,
+        "awards": {},
+        "trustDelta": { "dad": -6 },
+        "moodDelta": { "dad": "sad" },
+        "followUpText": "אבא נאנח ומתחיל לאסוף לבד.",
+        "animation": "walk"
+      },
+      {
+        "id": "argue",
+        "label": "להתלונן שזה לא הבלגן שלך",
+        "impulsive": true,
+        "awards": { "speech": 1 },
+        "trustDelta": { "dad": -4, "brother": -3 },
+        "followUpText": "הוויכוח מתלהט. איש לא מרוצה.",
+        "animation": "talk"
+      },
+      {
+        "id": "tidy",
+        "label": "לאסוף יחד בקצב נעים",
+        "requiresBreathe": true,
+        "awards": { "responsibility": 3, "restraint": 2 },
+        "trustDelta": { "dad": 8, "mom": 4 },
+        "moodDelta": { "dad": "happy" },
+        "followUpText": "תוך כמה דקות הבית נראה שוב נעים. אבא מודה לך.",
+        "animation": "clean"
+      },
+      {
+        "id": "game_tidy",
+        "label": "להפוך את הסידור למשחק תחרות",
+        "requiresBreathe": true,
+        "awards": { "creativity": 2, "friendship": 2, "responsibility": 2 },
+        "trustDelta": { "brother": 6, "dad": 5 },
+        "followUpText": "כולם צוחקים תוך כדי סידור. הבלגן נעלם מהר.",
+        "animation": "play"
+      }
+    ],
+    "summaryTemplate": "סיימת את סיטואציית הסידור בבית."
+  },
+  {
+    "id": "rainy_day",
+    "title": "יום גשום",
+    "location": "home",
+    "description": "רציתם לצאת לגינה, אבל הגשם חזק בחוץ. התוכנית מתבטלת.",
+    "emotion": "אתה מרגיש אכזבה — רצית אוויר פתוח ומשחק בחוץ.",
+    "tense": false,
+    "choices": [
+      {
+        "id": "sulk",
+        "label": "להתכעס ולשבת בפינה",
+        "impulsive": true,
+        "awards": {},
+        "followUpText": "הזמן עובר לאט. האווירה בבית כבדה.",
+        "animation": "sad"
+      },
+      {
+        "id": "force_out",
+        "label": "לנסות לצאת בכל זאת בלי מעיל",
+        "impulsive": true,
+        "awards": { "courage": 1 },
+        "trustDelta": { "mom": -4 },
+        "followUpText": "אמא עוצרת אותך בפתח. אתה חוזר רטוב ומוטרד.",
+        "animation": "walk"
+      },
+      {
+        "id": "alt_plan",
+        "label": "להמציא משחק בית חדש",
+        "requiresBreathe": true,
+        "awards": { "flexibility": 3, "creativity": 3 },
+        "trustDelta": { "brother": 5, "maya": 3 },
+        "followUpText": "בונים מחנה שמיכות בסלון. הגשם בחוץ, והכיף בפנים.",
+        "animation": "play"
+      },
+      {
+        "id": "bake",
+        "label": "לבקש מאמא לאפות יחד",
+        "requiresBreathe": true,
+        "awards": { "speech": 2, "friendship": 2, "responsibility": 1 },
+        "trustDelta": { "mom": 7 },
+        "followUpText": "המטבח מתמלא ריח טוב. האכזבה מתרככת.",
+        "animation": "cook"
+      }
+    ],
+    "summaryTemplate": "מצאת דרך אחרת ליום הגשום."
+  },
+  {
+    "id": "guest_mess",
+    "title": "חבר עושה בלגן",
+    "location": "home",
+    "description": "החבר הגיע הביתה ופיזר צעצועים בכל הסלון תוך כדי משחק.",
+    "emotion": "אתה נהנה, אבל גם מרגיש אחריות — מה יגידו ההורים?",
+    "tense": false,
+    "choices": [
+      {
+        "id": "ignore",
+        "label": "להתעלם ולהמשיך לשחק",
+        "impulsive": true,
+        "awards": { "friendship": 1 },
+        "followUpText": "הבלגן גדל. אחר כך יהיה קשה יותר לאסוף.",
+        "animation": "play"
+      },
+      {
+        "id": "scold",
+        "label": "לכעוס על החבר בקול רם",
+        "impulsive": true,
+        "awards": { "speech": 1 },
+        "trustDelta": { "noam": -6, "maya": -6, "dani": -6 },
+        "followUpText": "החבר נעלב. המשחק נעצר.",
+        "animation": "talk"
+      },
+      {
+        "id": "invite_tidy",
+        "label": "להזמין אותו לאסוף יחד בסוף",
+        "requiresBreathe": true,
+        "awards": { "responsibility": 3, "friendship": 2, "speech": 1 },
+        "trustDelta": { "mom": 5 },
+        "followUpText": "אתם משחקים ואז אוספים יחד. כולם מרוצים.",
+        "animation": "clean"
+      },
+      {
+        "id": "zones",
+        "label": "להגדיר אזור משחק כדי לא לפזר הכל",
+        "requiresBreathe": true,
+        "awards": { "creativity": 2, "responsibility": 2, "flexibility": 1 },
+        "followUpText": "יש גבול ברור למשחק. פחות בלגן, אותו כיף.",
+        "animation": "talk"
+      }
+    ],
+    "summaryTemplate": "למדת לארח ולשמור על הבית."
+  },
+  {
+    "id": "crosswalk",
+    "title": "מעבר חצייה",
+    "location": "neighborhood",
+    "description": "הרמזור אדום, אבל אין מכוניות קרובות. חברים רצים כבר לצד השני.",
+    "emotion": "אתה מרגיש לחץ חברתי קל — רוצה להדביק אותם.",
+    "tense": true,
+    "choices": [
+      {
+        "id": "run",
+        "label": "לרוץ אחריהם על אדום",
+        "impulsive": true,
+        "awards": { "courage": 1 },
+        "trustDelta": { "mom": -5, "teacher": -3 },
+        "followUpText": "עברת, אבל אחר כך אמא שומעת וכועסת מדאגה.",
+        "animation": "run"
+      },
+      {
+        "id": "wait",
+        "label": "לחכות לירוק גם אם זה לוקח זמן",
+        "requiresBreathe": true,
+        "awards": { "restraint": 3, "responsibility": 2 },
+        "trustDelta": { "mom": 4 },
+        "followUpText": "אתה מחכה. כשעוברים יחד בבטחה, אתה מרגיש גאה.",
+        "animation": "idle"
+      },
+      {
+        "id": "call_back",
+        "label": "לקרוא לחברים לחכות איתך",
+        "requiresBreathe": true,
+        "awards": { "speech": 2, "friendship": 2, "courage": 1 },
+        "trustDelta": { "noam": 4 },
+        "followUpText": "חלק חוזרים. עברתם יחד בירוק.",
+        "animation": "talk"
+      }
+    ],
+    "summaryTemplate": "בחרת איך להתנהל בכביש."
+  },
+  {
+    "id": "lost_cat",
+      "title": "החתול האבוד",
+      "location": "park",
+      "description": "שומעים יללה מאחורי השיח. החתול של דודה רחל שם, אבל מפחד.",
+      "emotion": "אתה מרגיש רצון לעזור, וגם קצת פחד שהחתול יברח.",
+      "tense": false,
+      "choices": [
+        {
+          "id": "grab",
+          "label": "לתפוס אותו מהר",
+          "impulsive": true,
+          "awards": { "courage": 1 },
+          "followUpText": "החתול נבהל ובורח עמוק יותר לשיחים.",
+          "animation": "run"
+        },
+        {
+          "id": "calm",
+          "label": "לשבת בשקט ולהושיט יד לאט",
+          "requiresBreathe": true,
+          "awards": { "restraint": 3, "friendship": 2 },
+          "trustDelta": { "neighbor": 10 },
+          "followUpText": "החתול מתקרב. אתם מחזירים אותו לדודה רחל.",
+          "animation": "idle"
+        }
+      ],
+      "summaryTemplate": "סיימתם את חיפוש החתול."
+    },
+    {
+      "id": "bike_theft",
+      "title": "האופניים לא נעולות",
+      "location": "school",
+      "description": "השארת את האופניים בלי מנעול. כשחזרת, מישהו כבר נוגע בכידון.",
+      "emotion": "כעס ופחד עולים יחד.",
+      "tense": true,
+      "choices": [
+        {
+          "id": "shout",
+          "label": "לצעוק ולמשוך בכוח",
+          "impulsive": true,
+          "awards": { "courage": 1 },
+          "followUpText": "הילד נבהל ובורח. האופניים נשארות, אבל הלב דופק.",
+          "animation": "stomp"
+        },
+        {
+          "id": "ask",
+          "label": "לשאול בשקט למי זה",
+          "requiresBreathe": true,
+          "awards": { "speech": 2, "restraint": 2, "responsibility": 1 },
+          "followUpText": "מתברר שהוא רק הסתכל. אתם נועלים יחד את האופניים.",
+          "animation": "talk"
+        }
+      ],
+      "summaryTemplate": "טיפלתם באופניים בחניון."
+    }
+  ]

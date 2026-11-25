@@ -1,0 +1,134 @@
+{
+  "products": [
+    {
+      "id": "apple",
+      "name": "תפוח",
+      "kind": "food",
+      "moneyCost": 3,
+      "strengthCost": {},
+      "deliveryCost": 1,
+      "breakRisk": 0.05,
+      "description": "ממלא קצת רעב."
+    },
+    {
+      "id": "sandwich",
+      "name": "כריך",
+      "kind": "food",
+      "moneyCost": 6,
+      "strengthCost": { "responsibility": 1 },
+      "deliveryCost": 2,
+      "breakRisk": 0.08,
+      "description": "ארוחה קטנה לדרך."
+    },
+    {
+      "id": "pizza",
+      "name": "פיצה",
+      "kind": "food",
+      "moneyCost": 12,
+      "strengthCost": { "speech": 2, "courage": 2, "flexibility": 3 },
+      "deliveryCost": 4,
+      "breakRisk": 0.2,
+      "description": "פיצה חמה — טעימה אבל שברירית בדרך."
+    },
+    {
+      "id": "toy_blocks",
+      "name": "קוביות",
+      "kind": "toy",
+      "moneyCost": 8,
+      "strengthCost": { "creativity": 2 },
+      "deliveryCost": 3,
+      "breakRisk": 0.1,
+      "description": "לבנייה ולבלגן שמח."
+    },
+    {
+      "id": "ball",
+      "name": "כדור",
+      "kind": "toy",
+      "moneyCost": 7,
+      "strengthCost": { "friendship": 2, "courage": 1 },
+      "deliveryCost": 2,
+      "breakRisk": 0.05,
+      "description": "מושלם למשחקי חצר."
+    },
+    {
+      "id": "board_game",
+      "name": "משחק קופסה",
+      "kind": "toy",
+      "moneyCost": 15,
+      "strengthCost": { "flexibility": 2, "speech": 1 },
+      "deliveryCost": 4,
+      "breakRisk": 0.12,
+      "description": "נהדר לימי גשם."
+    },
+    {
+      "id": "desk_lamp",
+      "name": "מנורת שולחן",
+      "kind": "furniture",
+      "moneyCost": 18,
+      "strengthCost": { "responsibility": 2, "creativity": 1 },
+      "deliveryCost": 5,
+      "breakRisk": 0.25,
+      "description": "שדרוג לחדר — עדיף בהובלה."
+    },
+    {
+      "id": "plant",
+      "name": "עציץ",
+      "kind": "furniture",
+      "moneyCost": 9,
+      "strengthCost": { "responsibility": 1 },
+      "deliveryCost": 3,
+      "breakRisk": 0.3,
+      "description": "ירוק ונעים לסלון."
+    },
+    {
+      "id": "mom_gift",
+      "name": "מתנה לאמא",
+      "kind": "gift",
+      "moneyCost": 14,
+      "strengthCost": { "friendship": 2, "speech": 1 },
+      "deliveryCost": 3,
+      "breakRisk": 0.15,
+      "description": "ליום הולדת או סתם כיף."
+    },
+    {
+      "id": "bike",
+      "name": "אופניים",
+      "kind": "tool",
+      "moneyCost": 40,
+      "strengthCost": { "courage": 4, "responsibility": 3, "restraint": 2 },
+      "deliveryCost": 0,
+      "breakRisk": 0,
+      "description": "יעד גדול: תנועה מהירה בעיר."
+    },
+    {
+      "id": "scooter",
+      "name": "קורקינט",
+      "kind": "tool",
+      "moneyCost": 32,
+      "strengthCost": { "courage": 3, "flexibility": 2 },
+      "deliveryCost": 0,
+      "breakRisk": 0,
+      "description": "יעד גדול: זזים מהר בין אזורים."
+    },
+    {
+      "id": "backpack",
+      "name": "תיק גב משודרג",
+      "kind": "tool",
+      "moneyCost": 28,
+      "strengthCost": { "responsibility": 3, "restraint": 2 },
+      "deliveryCost": 0,
+      "breakRisk": 0,
+      "description": "מקטין מאוד את סיכון השבירה בסחיבה."
+    },
+    {
+      "id": "zoo_plush",
+      "name": "בובת גן חיות",
+      "kind": "toy",
+      "moneyCost": 11,
+      "strengthCost": { "friendship": 1, "creativity": 1 },
+      "deliveryCost": 3,
+      "breakRisk": 0.08,
+      "description": "מזכרת מחנות גן החיות."
+    }
+  ]
+}

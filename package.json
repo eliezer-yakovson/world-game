@@ -1,0 +1,28 @@
+{
+  "name": "world-game",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "tauri": "tauri",
+    "tauri:dev": "tauri dev",
+    "tauri:build": "tauri build",
+    "verify-licenses": "node scripts/verify-licenses.mjs",
+    "vo": "node scripts/generate-vo.mjs"
+  },
+  "dependencies": {
+    "howler": "^2.2.4",
+    "three": "^0.180.0",
+    "yuka": "^0.7.8"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.9.0",
+    "@types/howler": "^2.2.12",
+    "@types/three": "^0.180.0",
+    "typescript": "~7.0.2",
+    "vite": "^8.3.8"
+  }
+}

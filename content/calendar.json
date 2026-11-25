@@ -1,0 +1,32 @@
+{
+  "events": [
+    {
+      "day": 2,
+      "id": "mom_birthday",
+      "title": "יום הולדת לאמא",
+      "description": "זכור לקנות מתנה במכולת ולהביא הביתה.",
+      "zone": "shop"
+    },
+    {
+      "day": 3,
+      "id": "zoo_trip",
+      "title": "טיול כיתתי לגן החיות",
+      "description": "הכיתה יוצאת לגן החיות בבוקר. אל תאחר!",
+      "zone": "zoo"
+    },
+    {
+      "day": 5,
+      "id": "street_fair",
+      "title": "יריד שכונתי",
+      "description": "דוכנים בפארק ובשכונה. הזדמנות לחברות ולקניות.",
+      "zone": "park"
+    },
+    {
+      "day": 7,
+      "id": "lost_cat",
+      "title": "חתול אבוד",
+      "description": "השכנה מחפשת את החתול שלה ליד הפארק.",
+      "zone": "park"
+    }
+  ]
+}

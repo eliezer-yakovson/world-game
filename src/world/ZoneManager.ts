@@ -24,6 +24,14 @@ export class ZoneManager {
     return this.result?.carPath;
   }
 
+  get carLanes() {
+    return this.result?.carLanes;
+  }
+
+  get trafficLights() {
+    return this.result?.trafficLights;
+  }
+
   get spawn(): THREE.Vector3 {
     return this.result?.spawn.clone() ?? new THREE.Vector3();
   }

@@ -30,6 +30,17 @@ export interface ZoneBuildResult {
   spawn: THREE.Vector3;
   npcSpawns: Array<{ id: string; position: THREE.Vector3 }>;
   carPath?: THREE.Vector3[];
+  carLanes?: THREE.Vector3[][];
+  trafficLights?: TrafficLightSpot[];
+}
+
+export interface TrafficLightSpot {
+  x: number;
+  z: number;
+  /** Which road this head governs: x is east-west, z is north-south. */
+  axis: 'x' | 'z';
+  faceX: number;
+  faceZ: number;
 }
 
 function house(x: number, z: number, wall: THREE.Material, name: string): THREE.Group {
@@ -89,24 +100,149 @@ export function buildZone(zone: ZoneId): ZoneBuildResult {
   }
 }
 
+const LANE_Y = 0.32;
+
+function approach(from: [number, number], to: [number, number], dist: number): [number, number] {
+  const dx = to[0] - from[0];
+  const dz = to[1] - from[1];
+  const len = Math.hypot(dx, dz) || 1;
+  const d = Math.min(dist, len * 0.4);
+  return [to[0] - (dx / len) * d, to[1] - (dz / len) * d];
+}
+
+/** Closed lane. Corners are rounded so a car stays on the asphalt through the turn. */
+function roundedLane(corners: Array<[number, number]>): THREE.Vector3[] {
+  const pts: THREE.Vector3[] = [];
+  const n = corners.length;
+  for (let i = 0; i < n; i++) {
+    const prev = corners[(i - 1 + n) % n];
+    const cur = corners[i];
+    const next = corners[(i + 1) % n];
+    const pin = approach(prev, cur, 3);
+    const pout = approach(next, cur, 3);
+    for (let s = 0; s <= 4; s++) {
+      const t = s / 4;
+      const u = 1 - t;
+      pts.push(
+        new THREE.Vector3(
+          u * u * pin[0] + 2 * u * t * cur[0] + t * t * pout[0],
+          LANE_Y,
+          u * u * pin[1] + 2 * u * t * cur[1] + t * t * pout[1],
+        ),
+      );
+    }
+  }
+  return pts;
+}
+
+function neighborhoodLanes(): THREE.Vector3[][] {
+  const west = -24;
+  const east = 26;
+  const south = -24;
+  const north = 22;
+  const lane = 1.55;
+  // Right-hand lanes: counter-clockwise on the inner side, clockwise on the outer side.
+  const inner: Array<[number, number]> = [
+    [west + lane, south + lane],
+    [west + lane, north - lane],
+    [east - lane, north - lane],
+    [east - lane, south + lane],
+  ];
+  const outer: Array<[number, number]> = [
+    [west - lane, south - lane],
+    [east + lane, south - lane],
+    [east + lane, north + lane],
+    [west - lane, north + lane],
+  ];
+  const main = [
+    [-30, -lane],
+    [30, -lane],
+    [32.6, -lane],
+    [33.4, -0.7],
+    [33.4, 0.7],
+    [32.6, lane],
+    [30, lane],
+    [-30, lane],
+    [-32.6, lane],
+    [-33.4, 0.7],
+    [-33.4, -0.7],
+    [-32.6, -lane],
+  ].map(([x, z]) => new THREE.Vector3(x, LANE_Y, z));
+  return [roundedLane(inner), roundedLane(outer), main];
+}
+
+function neighborhoodLights(): TrafficLightSpot[] {
+  const junctions: Array<[number, number]> = [
+    [-24, 0],
+    [26, 0],
+    [-24, -24],
+    [26, -24],
+    [-24, 22],
+    [26, 22],
+    [0, 0],
+  ];
+  const lights: TrafficLightSpot[] = [];
+  const o = 5.2;
+  for (const [x, z] of junctions) {
+    lights.push({ x: x - o, z: z + o, axis: 'x', faceX: x, faceZ: z });
+    lights.push({ x: x + o, z: z - o, axis: 'z', faceX: x, faceZ: z });
+  }
+  return lights;
+}
+
+function addRoad(group: THREE.Group, width: number, depth: number, x: number, z: number): void {
+  const mesh = box(width, 0.14, depth, mats.road, x, 0.02, z);
+  mesh.userData.dress = { prop: 'road-straight', fit: 'road', value: 1 };
+  group.add(mesh);
+}
+
+function zebra(group: THREE.Group, x: number, z: number, along: 'x' | 'z', mat: THREE.Material): void {
+  for (let i = -2; i <= 2; i++) {
+    const stripe =
+      along === 'x'
+        ? box(0.55, 0.04, 3.2, mat, x + i * 1.05, 0.11, z)
+        : box(3.2, 0.04, 0.55, mat, x, 0.11, z + i * 1.05);
+    stripe.userData.noCollide = true;
+    group.add(stripe);
+  }
+}
+
 function buildNeighborhood(): ZoneBuildResult {
   const group = new THREE.Group();
   group.name = 'zone-neighborhood';
   const interactables: Interactable[] = [];
 
   group.add(box(80, 0.2, 80, mats.grass, 0, -0.1, 0));
-  const mainRoad = box(80, 0.15, 8, mats.road, 0, 0.02, 0);
-  mainRoad.userData.dress = { prop: 'road-straight', fit: 'road', value: 1 };
-  group.add(mainRoad);
-  const sideRoad = box(8, 0.15, 40, mats.road, 18, 0.02, -20);
-  sideRoad.userData.dress = { prop: 'road-straight', fit: 'road', value: 1 };
-  group.add(sideRoad);
-  group.add(box(80, 0.12, 2.2, mats.sidewalk, 0, 0.04, 5));
-  group.add(box(80, 0.12, 2.2, mats.sidewalk, 0, 0.04, -5));
+  // Main street plus a block to the south, a block to the north, and two cross streets.
+  // The old side road at x=18 ran through the yellow house, so the east road sits past the houses.
+  addRoad(group, 80, 8, 0, 0);
+  addRoad(group, 74, 7, 0, -24);
+  addRoad(group, 74, 7, 0, 22);
+  addRoad(group, 7, 62, -24, -2);
+  addRoad(group, 7, 62, 26, -2);
+  // Sidewalks break at the cross streets so they don't pave over the junctions.
+  for (const z of [5, -5]) {
+    group.add(box(11.6, 0.12, 2.2, mats.sidewalk, -34.2, 0.04, z));
+    group.add(box(41.4, 0.12, 2.2, mats.sidewalk, 1.1, 0.04, z));
+    group.add(box(9.8, 0.12, 2.2, mats.sidewalk, 35.1, 0.04, z));
+  }
 
-  // Crosswalk
+  const paint = new THREE.MeshStandardMaterial({ color: 0xf4f4f4 });
   for (let i = -2; i <= 2; i++) {
-    group.add(box(0.6, 0.05, 3.5, new THREE.MeshStandardMaterial({ color: 0xf0f0f0 }), i * 1.1, 0.08, 0));
+    const stripe = box(0.6, 0.04, 3.5, paint, i * 1.1, 0.11, 0);
+    stripe.userData.noCollide = true;
+    group.add(stripe);
+  }
+  for (const [x, z] of [
+    [-24, 0],
+    [26, 0],
+    [-24, -24],
+    [26, -24],
+    [-24, 22],
+    [26, 22],
+  ] as Array<[number, number]>) {
+    zebra(group, x, z, 'x', paint);
+    zebra(group, x, z, 'z', paint);
   }
 
   const homes: Array<[number, number, THREE.Material, string, string]> = [
@@ -126,14 +262,14 @@ function buildNeighborhood(): ZoneBuildResult {
     [-20, -8],
     [-6, 8],
     [8, -8],
-    [22, 4],
+    [19.5, 6],
     [-18, 6],
   ]) {
     group.add(tree(x, z));
   }
 
   // Street lights
-  for (const x of [-20, -5, 10, 25]) {
+  for (const x of [-20, -5, 10, 20]) {
     const rig = new THREE.Group();
     rig.name = 'prop-lamp';
     rig.position.set(x, 0, 4.2);
@@ -165,7 +301,7 @@ function buildNeighborhood(): ZoneBuildResult {
   makeSign('הבית הצהוב', 12, -9.2, 'home_yellow');
   makeSign('בית הספר', -12, 9.2, 'school');
   makeSign('המכולת', 14, 7.5, 'shop');
-  makeSign('הפארק', 22, -2, 'park');
+  makeSign('הפארק', 20.2, -6.6, 'park');
   makeSign('גן החיות', 18, -18, 'zoo');
 
   // Direct door hotspots at house fronts (easier discovery)
@@ -206,20 +342,20 @@ function buildNeighborhood(): ZoneBuildResult {
   });
 
   // Parent car spot
-  const car = box(2.2, 0.8, 4.2, new THREE.MeshStandardMaterial({ color: 0x3d6ea8 }), 4, 0.5, -3);
+  const car = box(3.8, 0.8, 2.2, new THREE.MeshStandardMaterial({ color: 0x3d6ea8 }), 6, 0.5, -7.8);
   car.userData.dress = { prop: 'sedan', fit: 'height', value: 1.45 };
   group.add(car);
   interactables.push({
     id: 'parent-car',
     label: 'להיכנס להסעת ההורים',
-    position: new THREE.Vector3(4, 0, -3),
+    position: new THREE.Vector3(6, 0, -7.8),
     radius: 2.5,
     type: 'parent_car',
   });
   interactables.push({
     id: 'taxi',
     label: 'לקחת מונית קצרה',
-    position: new THREE.Vector3(8, 0, 2),
+    position: new THREE.Vector3(8, 0, 6.4),
     radius: 2.2,
     type: 'activity',
     data: { action: 'taxi' },
@@ -234,14 +370,7 @@ function buildNeighborhood(): ZoneBuildResult {
     data: { situation: 'crosswalk' },
   });
 
-  const carPath = [
-    new THREE.Vector3(-35, 0.4, 0),
-    new THREE.Vector3(-10, 0.4, 0),
-    new THREE.Vector3(0, 0.4, 0),
-    new THREE.Vector3(18, 0.4, 0),
-    new THREE.Vector3(18, 0.4, -18),
-    new THREE.Vector3(35, 0.4, -18),
-  ];
+  const carLanes = neighborhoodLanes();
 
   return {
     group,
@@ -253,7 +382,9 @@ function buildNeighborhood(): ZoneBuildResult {
       { id: 'maya', position: new THREE.Vector3(6, 0, 7) },
       { id: 'dani', position: new THREE.Vector3(2, 0, 8) },
     ],
-    carPath,
+    carPath: carLanes[2],
+    carLanes,
+    trafficLights: neighborhoodLights(),
   };
 }
 

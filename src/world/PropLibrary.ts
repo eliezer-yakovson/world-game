@@ -188,6 +188,13 @@ export function fitClone(source: THREE.Object3D, spec: Pick<DressSpec, 'fit' | '
   return wrap;
 }
 
+export function trafficLightModel(height = 3.25): THREE.Group | null {
+  if (!ready) return null;
+  const src = cloneCached('/assets/models/props/roads/traffic-light.glb');
+  if (!src) return null;
+  return fitClone(src, { fit: 'height', value: height });
+}
+
 /** Kenney cars face +Z; Three.js lookAt aims -Z, so turn the model around. */
 export function vehicleModel(id: string, height: number): THREE.Group | null {
   if (!ready) return null;
@@ -285,16 +292,10 @@ function applyDress(root: THREE.Group, obj: THREE.Object3D, spec: DressSpec): vo
 function addNeighborhoodExtras(root: THREE.Group): void {
   if (!root.getObjectByName('home-green')) return;
   const signSrc = cloneCached('/assets/models/props/roads/road-sign-stop.glb');
-  const lightSrc = cloneCached('/assets/models/props/roads/traffic-light.glb');
   if (signSrc) {
     const sign = fitClone(signSrc, { fit: 'height', value: 2.3 });
-    sign.position.set(3.2, 0, 2.6);
+    sign.position.set(2.4, 0, 5.9);
     root.add(sign);
-  }
-  if (lightSrc) {
-    const light = fitClone(lightSrc, { fit: 'height', value: 3.3 });
-    light.position.set(-3.4, 0, 2.6);
-    root.add(light);
   }
 }
 

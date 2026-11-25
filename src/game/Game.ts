@@ -19,6 +19,7 @@ import type {
 import { PlayerController } from '../characters/PlayerController';
 import { NpcManager } from '../characters/NpcManager';
 import { ZoneManager } from '../world/ZoneManager';
+import type { ZoneBuildResult } from '../world/ZoneBuilder';
 import { SituationEngine } from '../situations/SituationEngine';
 import { SituationDirector } from '../situations/SituationDirector';
 import { NeedsSystem } from '../systems/NeedsSystem';
@@ -63,7 +64,8 @@ export class Game {
   private npcs = new NpcManager();
   private traffic = new TrafficSystem();
   private colliders = new CollisionWorld();
-  private lastCarPath: THREE.Vector3[] | undefined;
+  private lastLanes: THREE.Vector3[][] | undefined;
+  private lastLights: ZoneBuildResult['trafficLights'];
   private npcLastPos = new Map<string, THREE.Vector3>();
   private zoneReady = false;
   private homeLife = new HomeLifeSystem();
@@ -183,7 +185,7 @@ export class Game {
       this.player.setCharacterModel(this.selectedPlayerId);
       if (!this.zoneReady) return;
       dressZone(this.zones.group);
-      this.traffic.setup(this.lastCarPath, this.zones.group);
+      this.traffic.setup(this.lastLanes ?? this.zones.carLanes, this.lastLights ?? this.zones.trafficLights, this.zones.group);
       this.colliders.rebuild(this.zones.group);
     });
     this.ui.showTitle(this.players, this.saves.listSlots(), Boolean(this.saves.loadAutosave()));
@@ -409,10 +411,11 @@ export class Game {
       this.memory.addDiary(this.pendingGuestId, this.gameClock.timeLabel, 'הגיע לבקר בבית השחקן');
     }
     this.npcs.spawn(this.zones.group, spawns, this.memory);
-    this.lastCarPath = built.carPath;
+    this.lastLanes = built.carLanes;
+    this.lastLights = built.trafficLights;
     this.zoneReady = true;
     dressZone(this.zones.group);
-    this.traffic.setup(built.carPath, this.zones.group);
+    this.traffic.setup(built.carLanes, built.trafficLights, this.zones.group);
     if (zone === 'home') {
       this.homeLife.bindToys(this.zones.group);
       this.applyHomeLayout();
@@ -1407,7 +1410,7 @@ export class Game {
 
     // Load a lightweight neighborhood preview behind title
     this.zones.load('neighborhood', this.scene);
-    this.traffic.setup(this.zones.carPath, this.zones.group);
+    this.traffic.setup(this.zones.carLanes, this.zones.trafficLights, this.zones.group);
   }
 }
 

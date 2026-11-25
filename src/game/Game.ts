@@ -187,6 +187,9 @@ export class Game {
     this.ui.onCharacterSelect = (id, freePlay) => this.beginNewGame(id, Boolean(freePlay));
     this.ui.onChoice = (id) => this.resolveChoice(id);
     this.ui.onBreathe = () => void this.handleBreathe();
+    this.ui.onUnblock = () => {
+      this.blocked = false;
+    };
     this.ui.onCloseOverlay = () => {
       this.scenes.clear();
       this.npcs.setHeld(false);
@@ -1302,18 +1305,17 @@ export class Game {
     this.setupSituationCompletion();
     // F key for inspector (also: click on a person)
     window.addEventListener('keydown', (e) => {
-      const key = e.key.toLowerCase();
       const typing = e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLSelectElement;
-      if (key === 'c' && this.running && !this.blocked && !typing) {
+      if (e.code === 'KeyC' && this.running && !this.blocked && !typing) {
         const top = this.player.toggleTopDown();
         this.ui.showCaption(top ? 'מבט מלמעלה. Q ו־R מסובבים את המבט.' : 'מבט רגיל מאחורי הדמות.');
       }
-      if (key === 'f' && this.running && !this.blocked) {
+      if (e.code === 'KeyF' && this.running && !this.blocked && !typing) {
         const npc = this.npcs.getNearest(this.player.position, 3);
         if (npc) this.openInspectorFor(npc.id);
       }
       // Eat food from inventory with G
-      if (e.key.toLowerCase() === 'g' && this.running) {
+      if (e.code === 'KeyG' && this.running && !typing) {
         const food = this.inventory.items.find((i) => i.kind === 'food');
         if (food) {
           this.inventory.remove(food.id);

@@ -39,6 +39,8 @@ export class UIManager {
   onPhoneAction?: (action: string, payload?: string) => void;
   onShopBuy?: (productId: string, delivery: boolean) => void;
   onHudAction?: (action: string) => void;
+  /** Close a panel that had frozen movement, without cancelling a situation. */
+  onUnblock?: () => void;
   onPoseAction?: (action: 'up' | 'sleep') => void;
   onSettingsChange?: (settings: Partial<GameSettings>) => void;
 
@@ -407,7 +409,10 @@ export class UIManager {
         this.onShopBuy?.(el.dataset.buy!, el.dataset.delivery === '1');
       });
     });
-    this.overlay.querySelector('#close-shop')!.addEventListener('click', () => this.hideOverlay());
+    this.overlay.querySelector('#close-shop')!.addEventListener('click', () => {
+      this.hideOverlay();
+      this.onUnblock?.();
+    });
     void strengths;
   }
 
@@ -601,7 +606,10 @@ export class UIManager {
     this.overlay.querySelectorAll('[data-role]').forEach((b) =>
       b.addEventListener('click', () => this.onHudAction?.(`recess:${(b as HTMLElement).dataset.role}`)),
     );
-    this.overlay.querySelector('#close-recess')!.addEventListener('click', () => this.hideOverlay());
+    this.overlay.querySelector('#close-recess')!.addEventListener('click', () => {
+      this.hideOverlay();
+      this.onUnblock?.();
+    });
   }
 
   setBreatheVisible(visible: boolean): void {

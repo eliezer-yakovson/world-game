@@ -10,10 +10,16 @@ import type { NpcManager } from './NpcManager';
  * wipe: a cloth scrubbing a small board in front of the body.
  * eat: a plate at chest height and a bite that rises to the mouth.
  * cook: a pot, a spoon circling inside it, and steam rising.
- * draw: a white sheet. Every moment a new colored scribble appears and
- *   the crayon sits at the end of that stroke.
- * playBlocks: bright blocks on the floor that stack, then tumble.
- * playBall: a ball bouncing in front of a jumping body.
+ * draw: a white sheet. Strokes accumulate and stay. A house, a sun and a
+ *   tree get drawn in, and stars gather around the page the longer it goes.
+ * playBlocks: a tower of blocks. A new block is added the longer they play,
+ *   and it stays stacked.
+ * playBall: balls bounce in front of a jumping body. Another ball joins
+ *   the longer they play.
+ * playCastle: a fort in front of the body. Floor, walls, towers, a roof
+ *   and a flag appear one after another and stay.
+ * playRoad: a toy road that gains another tile and another car the longer
+ *   they play.
  * read: an open book held up, body sitting.
  * water: a can tipped forward, blue drops falling in front.
  * laundry: a basket and a shirt that folds flatter, then opens again.
@@ -30,6 +36,8 @@ export type TaskKind =
   | 'draw'
   | 'playBlocks'
   | 'playBall'
+  | 'playCastle'
+  | 'playRoad'
   | 'read'
   | 'water'
   | 'laundry'
@@ -74,6 +82,8 @@ const STATIONS: Record<string, Station> = {
   draw: { x: -0.8, z: -2.7, yaw: 0.15 },
   toys: { x: -5.6, z: 2.5, yaw: 0.4 },
   ball: { x: 1.7, z: 2.7, yaw: -0.2 },
+  castle: { x: -4.1, z: 3.5, yaw: 0.5 },
+  road: { x: 3.5, z: 3.3, yaw: -0.6 },
   sofa: { x: -4.5, z: 0.85, yaw: 0 },
   plant: { x: 2.1, z: 1.9, yaw: 0 },
   laundry: { x: 6.2, z: 0.3, yaw: 1.1 },
@@ -89,6 +99,8 @@ const CLIP: Record<TaskKind, { kind: string; loop: boolean }> = {
   draw: { kind: 'idle', loop: true },
   playBlocks: { kind: 'idle', loop: true },
   playBall: { kind: 'jump', loop: true },
+  playCastle: { kind: 'idle', loop: true },
+  playRoad: { kind: 'idle', loop: true },
   read: { kind: 'sit', loop: false },
   water: { kind: 'idle', loop: true },
   laundry: { kind: 'idle', loop: true },
@@ -176,6 +188,20 @@ const POOLS: Record<string, Chore[]> = {
 
 function chore(kind: TaskKind, station: string, label: string, line: string): Chore {
   return { kind, station, label, line };
+}
+
+const GROW_EVERY: Partial<Record<TaskKind, { every: number; max: number; start: number }>> = {
+  draw: { every: 0.55, max: 48, start: 0 },
+  playBlocks: { every: 1.8, max: 16, start: 1 },
+  playBall: { every: 2.6, max: 6, start: 1 },
+  playCastle: { every: 2.2, max: 12, start: 1 },
+  playRoad: { every: 1.9, max: 10, start: 1 },
+};
+
+function grownCount(kind: TaskKind, seconds: number): number | null {
+  const rule = GROW_EVERY[kind];
+  if (!rule) return null;
+  return Math.min(rule.max, rule.start + Math.floor(Math.max(0, seconds) / rule.every));
 }
 
 export class HomeTaskDirector {
@@ -356,6 +382,8 @@ function createProp(kind: TaskKind, label: string): ChoreProp {
   else if (kind === 'draw') buildDraw(root, mat, use, mesh);
   else if (kind === 'playBlocks') buildBlocks(root, mat, use, mesh);
   else if (kind === 'playBall') buildBall(root, mat, use, mesh);
+  else if (kind === 'playCastle') buildCastle(root, mat, use, mesh);
+  else if (kind === 'playRoad') buildRoad(root, mat, use, mesh);
   else if (kind === 'read') buildBook(root, mat, use, mesh);
   else if (kind === 'water') buildWater(root, mat, use, mesh);
   else if (kind === 'laundry') buildLaundry(root, mat, use, mesh);
@@ -484,27 +512,80 @@ function buildDraw(root: THREE.Group, mat: MatFn, use: UseFn, mesh: MeshFn): voi
   paper.rotation.x = -0.2;
   const crayon = mesh(use(new THREE.CylinderGeometry(0.035, 0.035, 0.28, 8)), mat(0xe23b4a));
   const colors = ['#e23b4a', '#2f6fed', '#f2c14e', '#3aaa5a', '#9b59d0'];
-  let nextStroke = 0.2;
+  const starColors = [0xe23b4a, 0xf2c14e, 0x2f6fed, 0x3aaa5a];
+  const starSpots: Array<[number, number, number]> = [
+    [-0.58, 1.95, 0.9],
+    [0.58, 1.98, 0.88],
+    [-0.52, 1.28, 0.98],
+    [0.54, 1.26, 0.96],
+    [0.02, 2.12, 0.84],
+    [-0.22, 1.12, 1.02],
+    [0.28, 2.08, 0.9],
+    [0.08, 1.18, 1.05],
+  ];
   let tipX = 80;
   let tipY = 60;
+  let strokes = 0;
+  let starsBuilt = 0;
+  const stars: THREE.Mesh[] = [];
+  const stamp = (count: number) => {
+    if (!ctx) return;
+    if (count === 8 || count === 32) {
+      ctx.fillStyle = '#e7b15a';
+      ctx.fillRect(16, 64, 34, 26);
+      ctx.fillStyle = '#c4473a';
+      ctx.beginPath();
+      ctx.moveTo(12, 64);
+      ctx.lineTo(33, 44);
+      ctx.lineTo(54, 64);
+      ctx.fill();
+    } else if (count === 16) {
+      ctx.fillStyle = '#f2c14e';
+      ctx.beginPath();
+      ctx.arc(128, 28, 12, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (count === 24 || count === 40) {
+      ctx.fillStyle = '#3aaa5a';
+      ctx.fillRect(112, 70, 6, 22);
+      ctx.beginPath();
+      ctx.arc(115, 64, 12, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  };
   (root as THREE.Group & { tick?: (elapsed: number) => void }).tick = (elapsed) => {
-    if (ctx && elapsed > nextStroke) {
-      nextStroke = elapsed + 0.55;
-      const color = colors[Math.floor(elapsed) % colors.length];
+    const want = grownCount('draw', elapsed) ?? 0;
+    let guard = 0;
+    while (ctx && strokes < want && guard < 60) {
+      guard += 1;
+      const color = colors[strokes % colors.length];
       ctx.strokeStyle = color;
       ctx.lineWidth = 5;
       ctx.lineCap = 'round';
       ctx.beginPath();
       ctx.moveTo(tipX, tipY);
       for (let i = 0; i < 4; i++) {
-        tipX = Math.min(148, Math.max(12, tipX + (Math.random() - 0.5) * 48));
-        tipY = Math.min(108, Math.max(12, tipY + (Math.random() - 0.5) * 36));
+        tipX = Math.min(148, Math.max(12, tipX + (Math.random() - 0.5) * 42));
+        tipY = Math.min(108, Math.max(12, tipY + (Math.random() - 0.5) * 32));
         ctx.lineTo(tipX, tipY);
       }
       ctx.stroke();
+      strokes += 1;
+      stamp(strokes);
       texture.needsUpdate = true;
       (crayon.material as THREE.MeshStandardMaterial).color.set(color);
     }
+    const wantStars = Math.min(starSpots.length, Math.floor(elapsed / 3.2));
+    while (starsBuilt < wantStars) {
+      const spot = starSpots[starsBuilt];
+      const star = mesh(use(new THREE.OctahedronGeometry(0.07, 0)), mat(starColors[starsBuilt % starColors.length]));
+      star.position.set(spot[0], spot[1], spot[2]);
+      stars.push(star);
+      starsBuilt += 1;
+    }
+    stars.forEach((star, index) => {
+      star.rotation.y = elapsed + index;
+      star.rotation.z = elapsed * 0.6;
+    });
     crayon.position.set((tipX / 160 - 0.5) * 0.85, 1.62 + (0.5 - tipY / 120) * 0.64 + 0.1, 1.05);
     crayon.rotation.z = Math.sin(elapsed * 4) * 0.4;
   };
@@ -512,23 +593,92 @@ function buildDraw(root: THREE.Group, mat: MatFn, use: UseFn, mesh: MeshFn): voi
 }
 
 function buildBlocks(root: THREE.Group, mat: MatFn, use: UseFn, mesh: MeshFn): void {
-  const colors = [0xe23b4a, 0x2f6fed, 0xf2c14e, 0x3aaa5a];
-  const blocks = colors.map((color) => mesh(use(new THREE.BoxGeometry(0.22, 0.22, 0.22)), mat(color)));
+  const colors = [0xe23b4a, 0x2f6fed, 0xf2c14e, 0x3aaa5a, 0x9b59d0, 0xe07a32];
+  const blocks: THREE.Mesh[] = [];
+  let built = 0;
   (root as THREE.Group & { tick?: (elapsed: number) => void }).tick = (elapsed) => {
-    const stack = (Math.sin(elapsed * 0.7) + 1) / 2;
+    const want = grownCount('playBlocks', elapsed) ?? 1;
+    while (built < want) {
+      const block = mesh(use(new THREE.BoxGeometry(0.26, 0.24, 0.26)), mat(colors[built % colors.length]));
+      blocks.push(block);
+      built += 1;
+    }
     blocks.forEach((block, index) => {
-      const spread = (1 - stack) * (index - 1.5) * 0.28;
-      block.position.set(spread, 0.14 + stack * index * 0.22, 0.85);
-      block.rotation.y = (1 - stack) * index;
+      const column = index < 8 ? 0 : 1;
+      const row = index % 8;
+      block.position.set(0.5 + column * 0.32, 0.14 + row * 0.24, 1);
+      block.rotation.z = 0;
     });
+    const top = blocks[blocks.length - 1];
+    if (top) top.rotation.z = Math.sin(elapsed * 2.2) * 0.06;
   };
 }
 
 function buildBall(root: THREE.Group, mat: MatFn, use: UseFn, mesh: MeshFn): void {
-  const ball = mesh(use(new THREE.SphereGeometry(0.2, 14, 12)), mat(0xde3b4a));
+  const colors = [0xde3b4a, 0x2f6fed, 0xf2c14e, 0x3aaa5a, 0x9b59d0, 0xe07a32];
+  const balls: THREE.Mesh[] = [];
+  let built = 0;
   (root as THREE.Group & { tick?: (elapsed: number) => void }).tick = (elapsed) => {
-    const bounce = Math.abs(Math.sin(elapsed * 3.2));
-    ball.position.set(Math.sin(elapsed * 1.4) * 0.25, 0.2 + bounce * 0.85, 0.9);
+    const want = grownCount('playBall', elapsed) ?? 1;
+    while (built < want) {
+      balls.push(mesh(use(new THREE.SphereGeometry(0.16, 14, 12)), mat(colors[built % colors.length])));
+      built += 1;
+    }
+    balls.forEach((ball, index) => {
+      const bounce = Math.abs(Math.sin(elapsed * 3.1 + index * 0.7));
+      const spread = (index - (balls.length - 1) / 2) * 0.28;
+      ball.position.set(spread, 0.18 + bounce * (0.55 + index * 0.12), 0.95);
+    });
+  };
+}
+
+function buildCastle(root: THREE.Group, mat: MatFn, use: UseFn, mesh: MeshFn): void {
+  const pieces: Array<[number, number, number, number, number, number, number]> = [
+    [0, 0.05, 1.2, 1.3, 0.08, 1.2, 0xd7c4a3],
+    [0, 0.42, 1.76, 1.3, 0.66, 0.08, 0xcbb892],
+    [-0.61, 0.42, 1.2, 0.08, 0.66, 1.05, 0xcbb892],
+    [0.61, 0.42, 1.2, 0.08, 0.66, 1.05, 0xcbb892],
+    [0, 0.55, 0.64, 0.7, 0.4, 0.08, 0xcbb892],
+    [0, 0.24, 0.64, 0.26, 0.4, 0.06, 0x8d5a32],
+    [-0.72, 0.78, 1.76, 0.24, 1.2, 0.24, 0xb7a078],
+    [0.72, 0.78, 1.76, 0.24, 1.2, 0.24, 0xb7a078],
+    [0, 0.84, 1.2, 1.45, 0.08, 1.35, 0xb5523a],
+    [0.72, 1.5, 1.76, 0.04, 0.45, 0.04, 0xf4f1ea],
+    [0.88, 1.64, 1.76, 0.24, 0.14, 0.03, 0x2f6fed],
+    [0, 0.48, 1.8, 0.2, 0.16, 0.04, 0x7ec8e3],
+  ];
+  let built = 0;
+  (root as THREE.Group & { tick?: (elapsed: number) => void }).tick = (elapsed) => {
+    const want = Math.min(pieces.length, grownCount('playCastle', elapsed) ?? 1);
+    while (built < want) {
+      const [x, y, z, w, h, d, color] = pieces[built];
+      const piece = mesh(use(new THREE.BoxGeometry(w, h, d)), mat(color));
+      piece.position.set(x, y, z);
+      built += 1;
+    }
+  };
+}
+
+function buildRoad(root: THREE.Group, mat: MatFn, use: UseFn, mesh: MeshFn): void {
+  const colors = [0xe23b4a, 0x2f6fed, 0xf2c14e, 0x3aaa5a, 0x9b59d0, 0xe07a32];
+  const cars: THREE.Mesh[] = [];
+  let built = 0;
+  (root as THREE.Group & { tick?: (elapsed: number) => void }).tick = (elapsed) => {
+    const want = grownCount('playRoad', elapsed) ?? 1;
+    while (built < want) {
+      const x = -0.15 + built * 0.4;
+      const tile = mesh(use(new THREE.BoxGeometry(0.36, 0.05, 0.32)), mat(0x3c4148));
+      tile.position.set(x, 0.04, 1.05);
+      const line = mesh(use(new THREE.BoxGeometry(0.16, 0.02, 0.06)), mat(0xf2c14e));
+      line.position.set(x, 0.075, 1.05);
+      const car = mesh(use(new THREE.BoxGeometry(0.22, 0.1, 0.14)), mat(colors[built % colors.length]));
+      car.position.set(x, 0.14, 1.05);
+      cars.push(car);
+      built += 1;
+    }
+    cars.forEach((car, index) => {
+      car.position.y = 0.14 + Math.abs(Math.sin(elapsed * 3 + index)) * 0.06;
+    });
   };
 }
 
@@ -639,4 +789,205 @@ function makeLabel(text: string): THREE.Sprite {
   sprite.scale.set(1.5, 0.38, 1);
   sprite.renderOrder = 20;
   return sprite;
+}
+
+export interface TaskBody {
+  mesh: THREE.Object3D;
+  position: THREE.Vector3;
+  /** Yaw that points the body toward the camera, so the activity sits in view. */
+  cameraYaw: number;
+  taskHold: boolean;
+  playHeldClip(kind: string, loop: boolean): void;
+  releaseHold(): void;
+}
+
+export interface TaskChoice {
+  kind: TaskKind;
+  title: string;
+  station: string;
+  label: string;
+}
+
+const PLAYER_TASKS: TaskChoice[] = [
+  { kind: 'sweep', title: 'לטאטא', station: 'rug', label: 'מטאטא' },
+  { kind: 'wipe', title: 'לנגב', station: 'table', label: 'ניגוב' },
+  { kind: 'eat', title: 'לאכול', station: 'table', label: 'אכילה' },
+  { kind: 'cook', title: 'לבשל', station: 'kitchen', label: 'בישול' },
+  { kind: 'draw', title: 'לצייר', station: 'draw', label: 'ציור' },
+  { kind: 'playBlocks', title: 'מגדל קוביות', station: 'toys', label: 'קוביות' },
+  { kind: 'playBall', title: 'משחק כדורים', station: 'ball', label: 'כדורים' },
+  { kind: 'playCastle', title: 'לבנות מבצר', station: 'castle', label: 'מבצר' },
+  { kind: 'playRoad', title: 'מסלול מכוניות', station: 'road', label: 'מסלול' },
+  { kind: 'read', title: 'לקרוא', station: 'sofa', label: 'קריאה' },
+  { kind: 'water', title: 'להשקות', station: 'plant', label: 'השקיה' },
+  { kind: 'laundry', title: 'לקפל כביסה', station: 'laundry', label: 'כביסה' },
+  { kind: 'music', title: 'לרקוד', station: 'radio', label: 'ריקוד' },
+  { kind: 'phone', title: 'לדבר בטלפון', station: 'bed', label: 'טלפון' },
+  { kind: 'rest', title: 'לנוח', station: 'bed', label: 'מנוחה' },
+];
+
+const TASK_VERB: Record<TaskKind, [string, string]> = {
+  sweep: ['מטאטאת', 'מטאטא'],
+  wipe: ['מנגבת', 'מנגב'],
+  eat: ['אוכלת', 'אוכל'],
+  cook: ['מבשלת', 'מבשל'],
+  draw: ['מציירת', 'מצייר'],
+  playBlocks: ['בונה מגדל קוביות', 'בונה מגדל קוביות'],
+  playBall: ['משחקת בכדורים', 'משחק בכדורים'],
+  playCastle: ['בונה מבצר', 'בונה מבצר'],
+  playRoad: ['בונה מסלול מכוניות', 'בונה מסלול מכוניות'],
+  read: ['קוראת', 'קורא'],
+  water: ['משקה את העציץ', 'משקה את העציץ'],
+  laundry: ['מקפלת כביסה', 'מקפל כביסה'],
+  music: ['רוקדת', 'רוקד'],
+  phone: ['מדברת בטלפון', 'מדבר בטלפון'],
+  rest: ['נחה', 'נח'],
+};
+
+export function tasksForPlayer(): TaskChoice[] {
+  return PLAYER_TASKS.map((task) => ({ ...task }));
+}
+
+export function taskLine(playerId: string, name: string, kind: TaskKind): string {
+  const female = playerId === 'yael' || playerId === 'tala';
+  const verb = TASK_VERB[kind][female ? 0 : 1];
+  const tail = GROW_EVERY[kind]
+    ? 'זה ממשיך להיבנות כל עוד המשחק נמשך.'
+    : 'זה יימשך עד שתבחרו משימה אחרת.';
+  return `${name} ${verb}. ${tail}`;
+}
+
+export function progressText(kind: TaskKind, seconds: number): string | null {
+  if (!GROW_EVERY[kind]) return null;
+  if (seconds <= 0) return 'נבנה עוד ועוד';
+  const count = grownCount(kind, seconds) ?? 0;
+  if (kind === 'draw') {
+    if (count <= 0) return 'הדף ריק';
+    if (count === 1) return 'קו אחד';
+    return `${count} קווים`;
+  }
+  if (kind === 'playBlocks') return count === 1 ? 'קובייה אחת' : `${count} קוביות`;
+  if (kind === 'playBall') return count === 1 ? 'כדור אחד' : `${count} כדורים`;
+  if (kind === 'playCastle') return count === 1 ? 'חלק אחד' : `${count} חלקים`;
+  if (kind === 'playRoad') return count === 1 ? 'קטע אחד' : `${count} קטעים`;
+  return null;
+}
+
+function growthCaption(kind: TaskKind, seconds: number): string | null {
+  const count = grownCount(kind, seconds);
+  if (count === null) return null;
+  if (kind === 'draw') {
+    if (count < 4 || count % 4 !== 0) return null;
+    return `הציור מתמלא — ${count} קווים`;
+  }
+  if (kind === 'playBlocks') return `המגדל גדל — ${count === 1 ? 'קובייה אחת' : `${count} קוביות`}`;
+  if (kind === 'playBall') return `נוסף כדור — ${count === 1 ? 'כדור אחד' : `${count} כדורים`}`;
+  if (kind === 'playCastle') return `המבצר גדל — ${count === 1 ? 'חלק אחד' : `${count} חלקים`}`;
+  if (kind === 'playRoad') return `המסלול מתארך — ${count === 1 ? 'קטע אחד' : `${count} קטעים`}`;
+  return null;
+}
+
+/** The player's own chore. It keeps going until they pick another one. */
+export class PlayerTaskDirector {
+  private current: TaskChoice | null = null;
+  private phase: 'walk' | 'act' = 'act';
+  private session = 0;
+  private spent: Partial<Record<TaskKind, number>> = {};
+  private prop?: ChoreProp;
+  private dest: Station = { x: 0, z: 0, yaw: 0 };
+  private noted = -1;
+
+  constructor(private hooks?: { onSweep?: () => void; onEat?: () => void }) {}
+
+  get kind(): TaskKind | null {
+    return this.current?.kind ?? null;
+  }
+
+  get active(): boolean {
+    return this.current !== null;
+  }
+
+  seconds(kind: TaskKind): number {
+    const banked = this.spent[kind] ?? 0;
+    return banked + (this.current?.kind === kind && this.phase === 'act' ? this.session : 0);
+  }
+
+  start(choice: TaskChoice, body: TaskBody): void {
+    this.bank();
+    this.drop(body);
+    this.current = choice;
+    this.session = 0;
+    body.taskHold = true;
+    // Stay where the player already is. Walking to a corner puts the camera
+    // outside the house wall, and the activity disappears behind it.
+    this.beginAct(body, { x: body.position.x, z: body.position.z, yaw: body.cameraYaw });
+  }
+
+  /** Stops the performance and keeps whatever a game already built. */
+  yield(body: TaskBody): boolean {
+    if (!this.current) return false;
+    this.bank();
+    this.drop(body);
+    this.current = null;
+    this.phase = 'act';
+    body.releaseHold();
+    return true;
+  }
+
+  update(dt: number, body: TaskBody): string | null {
+    if (!this.current) return null;
+    body.taskHold = true;
+    this.session += dt;
+    const kind = this.current.kind;
+    let yaw = this.dest.yaw;
+    if (kind === 'music') yaw += Math.sin(this.seconds(kind) * 2.4) * 0.2;
+    body.position.x = this.dest.x;
+    body.position.y = 0;
+    body.position.z = this.dest.z;
+    body.mesh.rotation.y = yaw;
+    const clip = CLIP[kind];
+    body.playHeldClip(clip.kind, clip.loop);
+    this.prop?.tick(this.seconds(kind));
+    if (kind === 'sweep' && Math.floor(this.session / 5) > Math.floor((this.session - dt) / 5)) this.hooks?.onSweep?.();
+    if (kind === 'eat' && this.session >= 0.4 && this.session - dt < 0.4) this.hooks?.onEat?.();
+    else if (kind === 'eat' && Math.floor(this.session / 8) > Math.floor((this.session - dt) / 8)) this.hooks?.onEat?.();
+    const count = grownCount(kind, this.seconds(kind));
+    if (count === null || count <= this.noted) return null;
+    this.noted = count;
+    return growthCaption(kind, this.seconds(kind));
+  }
+
+  private beginAct(body: TaskBody, spot: Station): void {
+    if (!this.current) return;
+    this.drop(body);
+    this.phase = 'act';
+    this.dest = spot;
+    this.session = 0;
+    body.position.x = spot.x;
+    body.position.y = 0;
+    body.position.z = spot.z;
+    body.mesh.rotation.y = spot.yaw;
+    const clip = CLIP[this.current.kind];
+    body.playHeldClip(clip.kind, clip.loop);
+    this.prop = createProp(this.current.kind, this.current.label);
+    body.mesh.add(this.prop.object);
+    const soFar = this.seconds(this.current.kind);
+    if (soFar > 0) this.prop.tick(soFar);
+    this.noted = grownCount(this.current.kind, soFar) ?? -1;
+  }
+
+  private bank(): void {
+    if (!this.current || this.phase !== 'act') return;
+    const kind = this.current.kind;
+    this.spent[kind] = (this.spent[kind] ?? 0) + this.session;
+    this.session = 0;
+  }
+
+  private drop(body: TaskBody): void {
+    if (!this.prop) return;
+    body.mesh.remove(this.prop.object);
+    this.prop.dispose();
+    this.prop = undefined;
+  }
+
 }

@@ -27,7 +27,7 @@ import { StrengthEconomy } from '../systems/StrengthEconomy';
 import { FriendshipSystem } from '../systems/FriendshipSystem';
 import { TrafficSystem } from '../systems/TrafficSystem';
 import { HomeLifeSystem } from '../systems/HomeLifeSystem';
-import { HomeTaskDirector } from '../characters/homeTasks';
+import { HomeTaskDirector, PlayerTaskDirector, progressText, taskLine, tasksForPlayer } from '../characters/homeTasks';
 import { AudioDirector } from '../audio/AudioDirector';
 import { UIManager } from '../ui/UIManager';
 import { STRENGTH_LABELS } from '../core/types';
@@ -68,6 +68,11 @@ export class Game {
   private zoneReady = false;
   private homeLife = new HomeLifeSystem();
   private homeTasks = new HomeTaskDirector(this.npcs, () => this.homeLife.decreaseMess(1));
+  private playerTasks = new PlayerTaskDirector({
+    onSweep: () => this.homeLife.decreaseMess(1),
+    onEat: () => this.needs.eat(12),
+  });
+  private taskMenu = false;
   private audio = new AudioDirector();
   private saves = new SaveSystem();
   private ui: UIManager;
@@ -191,6 +196,7 @@ export class Game {
     this.ui.onBreathe = () => void this.handleBreathe();
     this.ui.onUnblock = () => {
       this.blocked = false;
+      this.taskMenu = false;
     };
     this.ui.onCloseOverlay = () => {
       this.scenes.clear();
@@ -392,6 +398,7 @@ export class Game {
 
   private goToZone(zone: ZoneId): void {
     if (this.player.posing) this.endSeat(false);
+    const pausedTask = this.playerTasks.yield(this.player);
     this.homeTasks.end();
     this.unlockedZones = unlockZone(this.unlockedZones, zone);
     const built = this.zones.load(zone, this.scene);
@@ -419,6 +426,7 @@ export class Game {
     this.collectLamps();
     this.refreshHud();
     this.audio.playSfx('door');
+    if (pausedTask) this.ui.showCaption('המשימה נעצרה. מה שכבר נבנה נשמר, ואפשר לבחור אותה שוב.');
   }
 
   private openInspectorFor(npcId: string): void {
@@ -526,6 +534,8 @@ export class Game {
       this.player.update(dt, this.camera, this.blocked, (next, radius) =>
         this.colliders.resolve(next, radius, this.movingObstacles('player')),
       );
+      const grew = this.playerTasks.update(dt, this.player);
+      if (grew && !this.taskMenu) this.ui.showCaption(grew, 1800);
       this.npcs.update(dt, this.gameClock, this.memory);
       this.homeTasks.update(dt);
       if (!this.npcs.isHeld) this.keepApart();
@@ -543,6 +553,9 @@ export class Game {
           this.endSeat(false);
           this.interactCooldown = 0.45;
         }
+      } else if (this.player.taskHold) {
+        this.ui.showHint('[T] משימות — להחליף או להפסיק');
+        this.player.consumeInteract();
       } else {
         this.handleProximity();
         if (!this.blocked && this.interactCooldown <= 0 && this.player.consumeInteract()) {
@@ -675,6 +688,7 @@ export class Game {
     bed?: boolean;
   }): void {
     if (this.player.posing) this.endSeat(false);
+    this.playerTasks.yield(this.player);
     this.player.startPose({
       x: options.x,
       y: options.y,
@@ -758,6 +772,7 @@ export class Game {
         this.memory.addStrengths({ friendship: 1, flexibility: 1 });
         break;
       case 'slide':
+        this.playerTasks.yield(this.player);
         this.player.startPose({
           x: 13.3,
           y: 1.05,
@@ -786,6 +801,7 @@ export class Game {
         this.memory.addStrengths({ flexibility: 1 });
         break;
       case 'climb':
+        this.playerTasks.yield(this.player);
         this.player.startPose({
           x: 9.9,
           z: -3.8,
@@ -947,7 +963,9 @@ export class Game {
     const diff = this.settings.freePlay ? 'easy' : this.settings.emotionalDifficulty;
     const ok = this.situations.start(id, diff);
     if (!ok || !this.situations.active) return;
+    this.taskMenu = false;
     if (this.player.posing) this.endSeat(false);
+    this.playerTasks.yield(this.player);
     this.blocked = true;
     this.npcs.setHeld(true);
     this.ui.hideOverlay();
@@ -1102,6 +1120,25 @@ export class Game {
     }
   }
 
+  private openTaskMenu(): void {
+    if (!this.running) return;
+    const id = this.selectedPlayerId;
+    const name = this.players.find((player) => player.id === id)?.name ?? 'הדמות';
+    const female = id === 'yael' || id === 'tala';
+    this.taskMenu = true;
+    this.blocked = true;
+    this.ui.showTasks(
+      female ? `מה ${name} תעשה?` : `מה ${name} יעשה?`,
+      tasksForPlayer().map((task) => ({
+        kind: task.kind,
+        title: task.title,
+        note: progressText(task.kind, this.playerTasks.seconds(task.kind)),
+        current: this.playerTasks.kind === task.kind,
+      })),
+      this.playerTasks.active,
+    );
+  }
+
   private handleHud(action: string): void {
     if (action === 'continue') {
       const auto = this.saves.loadAutosave();
@@ -1112,6 +1149,31 @@ export class Game {
       } else {
         this.ui.showCaption('אין שמירה אוטומטית עדיין');
       }
+      return;
+    }
+    if (action === 'tasks') {
+      this.openTaskMenu();
+      return;
+    }
+    if (action === 'task:stop') {
+      this.taskMenu = false;
+      this.ui.hideOverlay();
+      this.blocked = false;
+      this.playerTasks.yield(this.player);
+      this.ui.showCaption('הדמות חזרה ללכת');
+      return;
+    }
+    if (action.startsWith('task:')) {
+      const kind = action.slice(5);
+      const choice = tasksForPlayer().find((task) => task.kind === kind);
+      this.taskMenu = false;
+      this.ui.hideOverlay();
+      this.blocked = false;
+      if (!choice) return;
+      if (this.player.posing) this.endSeat(false);
+      this.playerTasks.start(choice, this.player);
+      const name = this.players.find((player) => player.id === this.selectedPlayerId)?.name ?? 'הדמות';
+      this.ui.showCaption(taskLine(this.selectedPlayerId, name, choice.kind));
       return;
     }
     if (action === 'phone') {
@@ -1315,6 +1377,15 @@ export class Game {
     // F key for inspector (also: click on a person)
     window.addEventListener('keydown', (e) => {
       const typing = e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLSelectElement;
+      if (e.code === 'KeyT' && this.running && !typing) {
+        if (this.taskMenu) {
+          this.taskMenu = false;
+          this.ui.hideOverlay();
+          this.blocked = false;
+        } else if (!this.blocked && !this.ui.overlayOpen) {
+          this.openTaskMenu();
+        }
+      }
       if (e.code === 'KeyC' && this.running && !this.blocked && !typing) {
         const top = this.player.toggleTopDown();
         this.ui.showCaption(top ? 'מבט מלמעלה. Q ו־R מסובבים את המבט.' : 'מבט רגיל מאחורי הדמות.');

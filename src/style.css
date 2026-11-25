@@ -503,6 +503,41 @@ button:disabled {
   justify-content: space-between;
 }
 
+.task-panel {
+  max-width: 760px;
+}
+
+.task-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.task-grid button {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  min-height: 58px;
+}
+
+.task-grid button small {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+
+.task-grid button.selected {
+  border-color: var(--accent);
+  background: rgba(61, 155, 143, 0.28);
+}
+
+@media (max-width: 640px) {
+  .task-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 .scene-dock {
   position: absolute;
   left: 50%;

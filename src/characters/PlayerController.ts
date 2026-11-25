@@ -24,6 +24,9 @@ export class PlayerController {
   private idleAction?: THREE.AnimationAction;
   private emoteAction?: THREE.AnimationAction;
   private moving = false;
+  /** While set, the player stays on a chosen chore instead of walking. */
+  taskHold = false;
+  private heldKey = '';
   private fallbackColor = 0x3d9b8f;
   private pose: {
     origin: THREE.Vector3;
@@ -128,9 +131,39 @@ export class PlayerController {
     this.idleAction?.reset().fadeIn(0.15).play();
   }
 
+  /** Plays a chore clip and keeps it playing. The same clip is not restarted. */
+  playHeldClip(kind: string, loop: boolean): void {
+    const key = `${kind}:${loop}`;
+    if (this.heldKey === key) return;
+    this.heldKey = key;
+    if (kind === 'walk' && this.walkAction) {
+      this.emoteAction?.fadeOut(0.15);
+      this.idleAction?.fadeOut(0.15);
+      this.walkAction.reset().setLoop(THREE.LoopRepeat, Infinity).fadeIn(0.15).play();
+      return;
+    }
+    if (kind === 'idle' && loop && this.idleAction) {
+      this.emoteAction?.fadeOut(0.15);
+      this.walkAction?.fadeOut(0.15);
+      this.idleAction.reset().fadeIn(0.15).play();
+      return;
+    }
+    this.playEmote(kind, loop);
+  }
+
+  releaseHold(): void {
+    this.taskHold = false;
+    this.heldKey = '';
+    if (this.mixer) this.playIdle();
+  }
+
   toggleTopDown(): boolean {
     this.topDown = !this.topDown;
     return this.topDown;
+  }
+
+  get cameraYaw(): number {
+    return this.yaw;
   }
 
   get posing(): boolean {
@@ -240,6 +273,16 @@ export class PlayerController {
         if (done) this.endPose();
         return;
       }
+    }
+
+    if (this.taskHold) {
+      if (!blocked) {
+        if (this.keys.has('KeyQ')) this.yaw += dt * 1.5 * this.sensitivity;
+        if (this.keys.has('KeyR')) this.yaw -= dt * 1.5 * this.sensitivity;
+        this.frameCamera(dt, camera);
+      }
+      this.mixer?.update(dt);
+      return;
     }
 
     if (blocked) {

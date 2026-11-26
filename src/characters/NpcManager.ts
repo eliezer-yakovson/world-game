@@ -40,6 +40,15 @@ export class NpcManager {
     this.profiles = Object.fromEntries(list.map((p) => [p.id, p]));
   }
 
+  removeActor(id: string): void {
+    const index = this.actors.findIndex((actor) => actor.id === id);
+    if (index < 0) return;
+    const actor = this.actors[index];
+    actor.mesh.removeFromParent();
+    this.entityManager.remove(actor.vehicle);
+    this.actors.splice(index, 1);
+  }
+
   clear(sceneGroup: THREE.Group): void {
     for (const actor of this.actors) {
       sceneGroup.remove(actor.mesh);
@@ -54,58 +63,65 @@ export class NpcManager {
     memory: MemoryStore,
   ): void {
     this.clear(sceneGroup);
-    for (const spawn of spawns) {
-      const profile = this.profiles[spawn.id];
-      if (!profile) continue;
-      memory.ensureNpc(spawn.id, {
-        trust: profile.trustTowardPlayer,
-        friendship: profile.friendship,
-        mood: profile.mood,
-      });
+    for (const spawn of spawns) this.spawnOne(sceneGroup, spawn, memory);
+  }
 
-      const { mesh, mixer, walkAction, idleAction, clips } = this.createMesh(spawn.id, profile.color);
-      mesh.position.copy(spawn.position);
-      mesh.userData.npcId = spawn.id;
-      mesh.traverse((child) => {
-        child.userData.npcId = spawn.id;
-      });
-      sceneGroup.add(mesh);
+  spawnOne(
+    sceneGroup: THREE.Group,
+    spawn: { id: string; position: THREE.Vector3 },
+    memory: MemoryStore,
+  ): void {
+    if (this.actors.some((actor) => actor.id === spawn.id)) return;
+    const profile = this.profiles[spawn.id];
+    if (!profile) return;
+    memory.ensureNpc(spawn.id, {
+      trust: profile.trustTowardPlayer,
+      friendship: profile.friendship,
+      mood: profile.mood,
+    });
 
-      const vehicle = new YUKA.Vehicle();
-      vehicle.maxSpeed = 1.8 + Math.random();
-      vehicle.position.set(spawn.position.x, 0, spawn.position.z);
+    const { mesh, mixer, walkAction, idleAction, clips } = this.createMesh(spawn.id, profile.color);
+    mesh.position.copy(spawn.position);
+    mesh.userData.npcId = spawn.id;
+    mesh.traverse((child) => {
+      child.userData.npcId = spawn.id;
+    });
+    sceneGroup.add(mesh);
 
-      const path = new YUKA.Path();
-      path.loop = true;
-      const cx = spawn.position.x;
-      const cz = spawn.position.z;
-      path.add(new YUKA.Vector3(cx, 0, cz));
-      path.add(new YUKA.Vector3(cx + 1.5, 0, cz + 1));
-      path.add(new YUKA.Vector3(cx - 0.6, 0, cz + 1.4));
-      path.add(new YUKA.Vector3(cx - 1.4, 0, cz));
+    const vehicle = new YUKA.Vehicle();
+    vehicle.maxSpeed = 1.8 + Math.random();
+    vehicle.position.set(spawn.position.x, 0, spawn.position.z);
 
-      const followPath = new YUKA.FollowPathBehavior(path, 0.5);
-      vehicle.steering.add(followPath);
+    const path = new YUKA.Path();
+    path.loop = true;
+    const cx = spawn.position.x;
+    const cz = spawn.position.z;
+    path.add(new YUKA.Vector3(cx, 0, cz));
+    path.add(new YUKA.Vector3(cx + 1.5, 0, cz + 1));
+    path.add(new YUKA.Vector3(cx - 0.6, 0, cz + 1.4));
+    path.add(new YUKA.Vector3(cx - 1.4, 0, cz));
 
-      this.entityManager.add(vehicle);
-      this.actors.push({
-        id: spawn.id,
-        profile: {
-          ...profile,
-          diary: memory.diaries[spawn.id] ?? [],
-          mood: memory.moods[spawn.id] ?? profile.mood,
-          trustTowardPlayer: memory.trust[spawn.id] ?? profile.trustTowardPlayer,
-        },
-        mesh,
-        vehicle,
-        path,
-        diaryQueue: [],
-        mixer,
-        clips,
-        walkAction,
-        idleAction,
-      });
-    }
+    const followPath = new YUKA.FollowPathBehavior(path, 0.5);
+    vehicle.steering.add(followPath);
+
+    this.entityManager.add(vehicle);
+    this.actors.push({
+      id: spawn.id,
+      profile: {
+        ...profile,
+        diary: memory.diaries[spawn.id] ?? [],
+        mood: memory.moods[spawn.id] ?? profile.mood,
+        trustTowardPlayer: memory.trust[spawn.id] ?? profile.trustTowardPlayer,
+      },
+      mesh,
+      vehicle,
+      path,
+      diaryQueue: [],
+      mixer,
+      clips,
+      walkAction,
+      idleAction,
+    });
   }
 
   setHeld(held: boolean): void {

@@ -41,6 +41,7 @@ import { preloadCharacters } from '../world/AssetLoader';
 import { dressZone, preloadProps } from '../world/PropLibrary';
 import { CollisionWorld, type CircleObstacle } from '../world/Collision';
 import { SchoolDayDirector } from '../characters/schoolDay';
+import { NpcLifeDirector } from '../characters/npcLife';
 
 const ALL_ZONES: ZoneId[] = [
   'neighborhood',
@@ -80,6 +81,10 @@ export class Game {
   private schoolDay = new SchoolDayDirector(this.npcs, {
     add: (object) => this.zones.group.add(object),
     remove: (object) => this.zones.group.remove(object),
+  });
+  private life = new NpcLifeDirector(this.npcs, this.memory, (id, x, z) => {
+    if (!this.zoneReady) return;
+    this.npcs.spawnOne(this.zones.group, { id, position: new THREE.Vector3(x, 0, z) }, this.memory);
   });
   private playerTasks = new PlayerTaskDirector({
     onSweep: () => this.homeLife.decreaseMess(1),
@@ -479,12 +484,14 @@ export class Game {
     this.unlockedZones = unlockZone(this.unlockedZones, zone);
     const built = this.zones.load(zone, this.scene);
     this.player.position.copy(built.spawn);
-    const spawns = [...built.npcSpawns];
+    if (!this.life.seeded) this.life.seed(this.npcProfiles, this.gameClock.hour);
     if (zone === 'home' && this.pendingGuestId) {
-      spawns.push({ id: this.pendingGuestId, position: new THREE.Vector3(1, 0, 2) });
+      this.life.bring(this.pendingGuestId, 'home', this.gameClock.hour);
       this.memory.addDiary(this.pendingGuestId, this.gameClock.timeLabel, 'הגיע לבקר בבית השחקן');
+      this.pendingGuestId = null;
     }
-    this.npcs.spawn(this.zones.group, spawns, this.memory);
+    const spawns = this.life.spawnsFor(zone);
+    this.npcs.spawn(this.zones.group, spawns.length ? spawns : built.npcSpawns, this.memory);
     this.lastLanes = built.carLanes;
     this.lastLights = built.trafficLights;
     this.zoneReady = true;
@@ -521,6 +528,7 @@ export class Game {
       this.memory.trust[npcId] ?? 50,
       this.memory.friendship[npcId] ?? 0,
       this.memory.diaries[npcId] ?? [],
+      this.life.card(npcId),
     );
   }
 
@@ -685,16 +693,11 @@ export class Game {
       const grew = this.playerTasks.update(dt, this.player);
       if (grew && !this.taskMenu && !this.sceneLock) this.ui.showCaption(grew, 1800);
       this.npcs.update(dt, this.gameClock, this.memory);
-      this.homeTasks.update(dt);
       this.performances.update(dt);
       if (!this.npcs.isHeld) this.keepApart();
-      if (this.zones.current === 'school') {
-        this.schoolDay.setPaused(this.performances.active || this.sceneLock);
-        const bell = this.schoolDay.update(dt, this.gameClock);
-        if (bell && !this.sceneLock) this.ui.showCaption(bell, 2600);
-      } else {
-        this.schoolDay.stop();
-      }
+      this.life.setPaused(this.performances.active || this.sceneLock || this.npcs.isHeld);
+      const beat = this.life.update(dt, this.zones.current, this.gameClock, this.player.position.x, this.player.position.z);
+      if (beat && !this.sceneLock) this.ui.showCaption(beat, 2600);
       this.traffic.update(dt);
       if (this.zones.current === 'zoo') this.zooLife.update(dt);
       if (this.zones.current === 'home') this.homeLife.maybePlayMess(0.0008 * this.timeAccel);

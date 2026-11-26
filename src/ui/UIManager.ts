@@ -13,6 +13,7 @@ import {
 } from '../core/types';
 import type { ActiveSituation } from '../situations/SituationEngine';
 import { previewImage, recipeForChoiceKey, recipeForSituation } from './choiceShots';
+import type { LifeCard } from '../characters/npcLife';
 
 export class UIManager {
   root: HTMLDivElement;
@@ -450,7 +451,18 @@ export class UIManager {
     this.setHudVisible(true);
   }
 
-  showInspector(profile: NpcProfile, trust: number, friendship: number, diary: Array<{ timeLabel: string; text: string }>): void {
+  showInspector(
+    profile: NpcProfile,
+    trust: number,
+    friendship: number,
+    diary: Array<{ timeLabel: string; text: string }>,
+    life: LifeCard | null = null,
+  ): void {
+    const strengths = life
+      ? (Object.keys(STRENGTH_LABELS) as (keyof StrengthMap)[])
+          .map((key) => `<span>${STRENGTH_LABELS[key]} ${life.strengths[key]}</span>`)
+          .join('')
+      : '';
     this.inspector.classList.add('visible');
     this.inspector.innerHTML = `
       <h3>${profile.name}</h3>
@@ -458,7 +470,18 @@ export class UIManager {
       <p>גר/ה: ${profile.home}</p>
       <p>לומד/עובד: ${profile.workOrSchool}</p>
       <p>תכונות: ${profile.traits.join(', ')}</p>
-      <p>אמון: ${trust} · חברות: ${friendship} · מצב רוח: ${profile.mood}</p>
+      <p>אמון: ${trust} · חברות: ${friendship} · מצב רוח: ${{ happy: 'שמח', neutral: 'רגיל', sad: 'עצוב', angry: 'כועס', tired: 'עייף', excited: 'נרגש', anxious: 'לחוץ' }[profile.mood] ?? profile.mood}</p>
+      ${
+        life
+          ? `<h4>איפה במשחק</h4>
+      <p>${life.zone} · ${life.place}</p>
+      <p>${life.step}</p>
+      <p><strong>${life.doing}</strong></p>
+      <h4>הישגים: ${life.achievements.length}</h4>
+      <div class="life-strengths">${strengths}</div>
+      <ul class="diary">${life.achievements.map((item) => `<li><strong>${item.timeLabel}</strong> — ${item.title}. ${item.detail}</li>`).join('') || '<li>עדיין אין הישגים. הם נצברים כשהבחירה נגמרת.</li>'}</ul>`
+          : ''
+      }
       <h4>מה עבר עליו היום</h4>
       <ul class="diary">${diary.map((d) => `<li><strong>${d.timeLabel}</strong> — ${d.text}</li>`).join('') || '<li>עדיין אין רשומות</li>'}</ul>
       <button class="ghost" id="close-insp">סגור</button>

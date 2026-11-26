@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { SCHOOL_SEATS, TEACHERS, schoolSpawns } from '../characters/schoolDay';
 import { box, cyl, mats } from './materials';
+import { buildPlayground, playgroundSpots } from './playground';
 import type { ZoneId } from '../core/types';
 
 export interface Interactable {
@@ -1032,62 +1033,6 @@ function buildShop(): ZoneBuildResult {
   };
 }
 
-function addPlayground(group: THREE.Group, ox: number, oz: number): void {
-  const red = new THREE.MeshStandardMaterial({ color: 0xd64545, roughness: 0.55 });
-  const yellow = new THREE.MeshStandardMaterial({ color: 0xf2c14e, roughness: 0.55 });
-  const blue = new THREE.MeshStandardMaterial({ color: 0x3d7ec9, roughness: 0.55 });
-  const green = new THREE.MeshStandardMaterial({ color: 0x3c9a5a, roughness: 0.55 });
-  const place = (mesh: THREE.Object3D, x: number, z: number) => {
-    mesh.position.x += ox + x;
-    mesh.position.z += oz + z;
-    group.add(mesh);
-  };
-  const post = (x: number, z: number) => place(box(0.14, 2.5, 0.14, blue, 0, 1.25, 0), x, z);
-  post(-1.35, -0.85);
-  post(1.35, -0.85);
-  post(-1.35, 0.85);
-  post(1.35, 0.85);
-  place(box(2.9, 0.12, 0.12, blue, 0, 2.45, 0), 0, -0.85);
-  place(box(2.9, 0.12, 0.12, blue, 0, 2.45, 0), 0, 0.85);
-  place(box(0.12, 0.12, 1.85, blue, 0, 2.45, 0), -1.35, 0);
-  place(box(0.12, 0.12, 1.85, blue, 0, 2.45, 0), 1.35, 0);
-  for (const sx of [-0.5, 0.5]) {
-    place(box(0.05, 1.35, 0.05, mats.metal, 0, 1.7, 0), sx, 0);
-    place(box(0.62, 0.08, 0.32, red, 0, 0.98, 0), sx, 0);
-  }
-
-  place(box(1.05, 1.35, 1.05, yellow, 0, 0.68, 0), 3.3, -0.4);
-  const chute = box(0.95, 0.12, 2.5, red, 0, 1.15, 0);
-  chute.rotation.x = -0.5;
-  place(chute, 3.3, 1.35);
-  place(box(0.08, 1.25, 0.08, yellow, 0, 0.62, 0), 2.9, -1.15);
-  place(box(0.08, 1.25, 0.08, yellow, 0, 0.62, 0), 3.7, -1.15);
-  for (const hy of [0.35, 0.7, 1.05]) place(box(0.85, 0.07, 0.1, yellow, 0, hy, 0), 3.3, -1.15);
-
-  const plank = box(0.42, 0.1, 2.6, green, 0, 0.62, 0);
-  plank.rotation.z = 0.22;
-  place(plank, 5.7, 0);
-  place(cyl(0.22, 0.45, blue, 0, 0.28, 0), 5.7, 0);
-  place(box(0.4, 0.08, 0.4, red, 0, 0.78, 0), 5.7, -1.15);
-  place(box(0.4, 0.08, 0.4, yellow, 0, 0.46, 0), 5.7, 1.15);
-
-  place(box(2.4, 0.22, 1.8, mats.wood, 0, 0.11, 0), 3.2, -3.1);
-  place(box(2, 0.1, 1.4, mats.sand, 0, 0.22, 0), 3.2, -3.1);
-
-  for (const [cx, cz] of [
-    [-1.15, -3.5],
-    [0.9, -3.5],
-    [-1.15, -2.1],
-    [0.9, -2.1],
-  ] as Array<[number, number]>) {
-    place(box(0.12, 1.55, 0.12, green, 0, 0.78, 0), cx, cz);
-  }
-  place(box(2.2, 0.1, 0.1, green, 0, 1.5, 0), -0.1, -3.5);
-  place(box(2.2, 0.1, 0.1, green, 0, 1.5, 0), -0.1, -2.1);
-  place(box(0.1, 0.1, 1.55, green, 0, 1.5, 0), -1.15, -2.8);
-  place(box(0.1, 0.1, 1.55, green, 0, 1.5, 0), 0.9, -2.8);
-}
-
 function buildPark(): ZoneBuildResult {
   const group = new THREE.Group();
   group.name = 'zone-park';
@@ -1108,48 +1053,17 @@ function buildPark(): ZoneBuildResult {
   group.add(bench(-4, 4));
   group.add(bench(4, -3, Math.PI / 2));
 
-  addPlayground(group, 10, -1);
-
-  interactables.push({
-    id: 'swing',
-    label: 'לשבת על הנדנדה',
-    position: new THREE.Vector3(10.5, 0, -1),
-    radius: 1.5,
-    type: 'activity',
-    data: { action: 'swing' },
-  });
-  interactables.push({
-    id: 'slide',
-    label: 'לרדת במגלשה',
-    position: new THREE.Vector3(13.3, 0, -2.3),
-    radius: 1.55,
-    type: 'activity',
-    data: { action: 'slide' },
-  });
-  interactables.push({
-    id: 'seesaw',
-    label: 'לשבת על נדנדת האיזון',
-    position: new THREE.Vector3(15.7, 0, -2.15),
-    radius: 1.5,
-    type: 'activity',
-    data: { action: 'seesaw' },
-  });
-  interactables.push({
-    id: 'climb',
-    label: 'לטפס על המתקן',
-    position: new THREE.Vector3(9.9, 0, -3.8),
-    radius: 1.55,
-    type: 'activity',
-    data: { action: 'climb' },
-  });
-  interactables.push({
-    id: 'sandbox',
-    label: 'לשחק בארגז החול',
-    position: new THREE.Vector3(13.2, 0, -4.1),
-    radius: 1.55,
-    type: 'activity',
-    data: { action: 'sandbox' },
-  });
+  buildPlayground(group);
+  for (const spot of playgroundSpots()) {
+    interactables.push({
+      id: `ride-${spot.id}-${spot.slot}`,
+      label: spot.label,
+      position: new THREE.Vector3(spot.x, 0, spot.z),
+      radius: 1.65,
+      type: 'activity',
+      data: { action: 'ride', ride: spot.id, slot: spot.slot },
+    });
+  }
   interactables.push({
     id: 'park-argue',
     label: 'לגשת למשחק הכדור',

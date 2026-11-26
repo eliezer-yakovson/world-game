@@ -33,6 +33,16 @@ export class PlayerController {
   /** While set, the player stays on a chosen chore instead of walking. */
   taskHold = false;
   private heldKey = '';
+  private pin: {
+    x: number;
+    y: number;
+    z: number;
+    yaw: number;
+    pitch: number;
+    roll: number;
+    emote: string;
+    loop: boolean;
+  } | null = null;
   private fallbackColor = 0x3d9b8f;
   private readonly aimForward = new THREE.Vector3();
   private readonly aimRight = new THREE.Vector3();
@@ -192,6 +202,35 @@ export class PlayerController {
     return this.pose !== null;
   }
 
+  get pinned(): boolean {
+    return this.pin !== null;
+  }
+
+  /** Hold the player on a playground motion. Applied at the start of update. */
+  setPin(pose: {
+    x: number;
+    y: number;
+    z: number;
+    yaw: number;
+    pitch: number;
+    roll: number;
+    emote: string;
+    loop: boolean;
+  }): void {
+    this.pin = pose;
+  }
+
+  clearPin(): void {
+    if (!this.pin) return;
+    this.pin = null;
+    this.heldKey = '';
+    this.position.y = 0;
+    this.mesh.rotation.order = 'YXZ';
+    this.mesh.rotation.x = 0;
+    this.mesh.rotation.z = 0;
+    this.playIdle();
+  }
+
   startPose(options: {
     x: number;
     y?: number;
@@ -283,6 +322,17 @@ export class PlayerController {
     blocked = false,
     resolve?: (next: THREE.Vector3, radius: number) => THREE.Vector3,
   ): void {
+    if (this.pin) {
+      const pin = this.pin;
+      this.position.set(pin.x, pin.y, pin.z);
+      this.mesh.rotation.order = 'YXZ';
+      this.mesh.rotation.set(pin.pitch, pin.yaw, pin.roll);
+      this.playHeldClip(pin.emote, pin.loop);
+      this.mixer?.update(dt);
+      this.frameCamera(dt, camera);
+      return;
+    }
+
     if (this.pose) {
       const pose = this.pose;
       pose.t += dt;

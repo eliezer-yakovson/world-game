@@ -38,6 +38,7 @@ import { UIManager } from '../ui/UIManager';
 import { setPreviewCharacter } from '../ui/choiceShots';
 import { STRENGTH_LABELS } from '../core/types';
 import { preloadCharacters } from '../world/AssetLoader';
+import { animateRides, rideById, sampleRide, setRideNow } from '../world/playground';
 import { dressZone, preloadProps } from '../world/PropLibrary';
 import { CollisionWorld, type CircleObstacle } from '../world/Collision';
 import { SchoolDayDirector } from '../characters/schoolDay';
@@ -111,6 +112,8 @@ export class Game {
   private running = false;
   private blocked = false;
   private poseMode: 'seat' | 'bed' | null = null;
+  private playerRide: { id: string; slot: number; t: number } | null = null;
+  private parkClock = 0;
   private interactCooldown = 0;
   private album: AlbumEntry[] = [];
   private unlockedZones: ZoneId[] = ['neighborhood', 'home'];
@@ -478,6 +481,7 @@ export class Game {
   private goToZone(zone: ZoneId): void {
     this.schoolDay.stop();
     this.endPerformance(false);
+    if (this.playerRide) this.finishPlayerRide(false, true);
     if (this.player.posing) this.endSeat(false);
     const pausedTask = this.playerTasks.yield(this.player);
     this.homeTasks.end();
@@ -688,6 +692,10 @@ export class Game {
       this.gameClock.update(dt);
       const gameMinutesDelta = dt * (this.gameClock.speed / 60);
       this.needs.update(gameMinutesDelta);
+      const worldPaused = this.performances.active || this.sceneLock || this.npcs.isHeld;
+      if (!worldPaused) this.parkClock += dt;
+      setRideNow(this.parkClock);
+      this.advancePlayerRide(dt, worldPaused);
       const circles = this.fillCircles(this.playerCircles, 'player');
       this.player.update(dt, this.camera, this.blocked, (next, radius) => this.colliders.resolve(next, radius, circles));
       const grew = this.playerTasks.update(dt, this.player);
@@ -698,6 +706,7 @@ export class Game {
       this.life.setPaused(this.performances.active || this.sceneLock || this.npcs.isHeld);
       const beat = this.life.update(dt, this.zones.current, this.gameClock, this.player.position.x, this.player.position.z);
       if (beat && !this.sceneLock) this.ui.showCaption(beat, 2600);
+      if (this.zones.current === 'park') animateRides(this.zones.group);
       this.traffic.update(dt);
       if (this.zones.current === 'zoo') this.zooLife.update(dt);
       if (this.zones.current === 'home') this.homeLife.maybePlayMess(0.0008 * this.timeAccel);
@@ -710,6 +719,12 @@ export class Game {
       if (this.sceneLock) {
         this.ui.showHint(this.performances.active ? 'הסצנה על המסך. כשהיא נעצרת, הבחירה למטה ממשיכה אותה.' : 'בחרו למטה איך הסצנה תיראה');
         this.player.consumeInteract();
+      } else if (this.player.pinned) {
+        this.ui.showHint('[E] לרדת');
+        if (this.interactCooldown <= 0 && this.player.consumeInteract()) {
+          this.finishPlayerRide(false);
+          this.interactCooldown = 0.45;
+        }
       } else if (this.player.posing) {
         this.ui.showHint('[E] לקום');
         if (this.interactCooldown <= 0 && this.player.consumeInteract()) {
@@ -883,6 +898,51 @@ export class Game {
     }
   }
 
+  private beginRide(id: string, slot: number): void {
+    const ride = rideById(id);
+    if (!ride) return;
+    if (this.player.posing) this.endSeat(false);
+    this.playerTasks.yield(this.player);
+    if (this.playerRide) this.finishPlayerRide(false, true);
+    const preferred = Number.isFinite(slot) ? slot : 0;
+    const chosen = this.life.slotTaken(id, preferred) ? this.life.freeSlot(id) : preferred;
+    this.life.claimRide(id, chosen);
+    this.playerRide = { id, slot: chosen, t: 0 };
+    this.player.setPin(sampleRide(id, chosen, 0));
+    this.ui.showCaption(`${ride.blurb}. E כדי לרדת`);
+  }
+
+  private advancePlayerRide(dt: number, paused: boolean): void {
+    if (!this.playerRide) return;
+    if (!paused && !this.blocked) this.playerRide.t += dt;
+    const ride = rideById(this.playerRide.id);
+    if (!ride || this.playerRide.t >= ride.duration) {
+      this.finishPlayerRide(Boolean(ride));
+      return;
+    }
+    this.player.setPin(sampleRide(this.playerRide.id, this.playerRide.slot, this.playerRide.t));
+  }
+
+  private finishPlayerRide(completed: boolean, quiet = false): void {
+    const current = this.playerRide;
+    if (!current) return;
+    const ride = rideById(current.id);
+    this.playerRide = null;
+    this.player.clearPin();
+    this.life.releaseClaim();
+    if (quiet || !ride) return;
+    if (!completed) {
+      this.ui.showCaption('ירדתם מהמתקן');
+      return;
+    }
+    this.memory.addStrengths(ride.awards);
+    const gained = (Object.keys(ride.awards) as (keyof StrengthMap)[])
+      .filter((key) => ride.awards[key])
+      .map((key) => `${STRENGTH_LABELS[key]} +${ride.awards[key]}`)
+      .join(', ');
+    this.ui.showCaption(`${ride.name}. ${gained}`);
+  }
+
   private runAction(action: string, data: Record<string, unknown> = {}): void {
     switch (action) {
       case 'toggleMusic':
@@ -923,70 +983,8 @@ export class Game {
           caption: 'ישבתם ליד השולחן.',
         });
         break;
-      case 'swing':
-        this.beginSeat({
-          x: 10.5,
-          y: 0.2,
-          z: -1,
-          yaw: 0,
-          bob: 0.32,
-          caption: 'נדנדה. E או תנועה כדי לרדת.',
-        });
-        this.memory.addStrengths({ friendship: 1, flexibility: 1 });
-        break;
-      case 'slide':
-        this.playerTasks.yield(this.player);
-        this.player.startPose({
-          x: 13.3,
-          y: 1.05,
-          z: -1.45,
-          yaw: 0,
-          emote: 'jump',
-          slideTo: new THREE.Vector3(13.3, 0.05, 0.55),
-          duration: 1.15,
-          lock: true,
-        });
-        this.poseMode = 'seat';
-        this.ui.hidePoseBar();
-        this.ui.showCaption('ירידה במגלשה!');
-        this.memory.addStrengths({ courage: 1 });
-        break;
-      case 'seesaw':
-        this.beginSeat({
-          x: 15.7,
-          y: 0.15,
-          z: -2.05,
-          yaw: Math.PI / 2,
-          bob: 0.28,
-          bobSpeed: 2.1,
-          caption: 'נדנדת איזון. E או תנועה כדי לרדת.',
-        });
-        this.memory.addStrengths({ flexibility: 1 });
-        break;
-      case 'climb':
-        this.playerTasks.yield(this.player);
-        this.player.startPose({
-          x: 9.9,
-          z: -3.8,
-          yaw: Math.PI,
-          emote: 'jump',
-          climb: true,
-          duration: 1.45,
-          lock: true,
-        });
-        this.poseMode = 'seat';
-        this.ui.hidePoseBar();
-        this.ui.showCaption('טיפוס על המתקן!');
-        this.memory.addStrengths({ courage: 1 });
-        break;
-      case 'sandbox':
-        this.beginSeat({
-          x: 13.2,
-          z: -4.1,
-          yaw: 0.4,
-          caption: 'משחק בארגז החול.',
-        });
-        this.memory.addStrengths({ creativity: 1 });
+      case 'ride':
+        this.beginRide(String(data.ride ?? ''), Number(data.slot ?? 0));
         break;
       case 'sleep':
         this.needs.sleep(70);

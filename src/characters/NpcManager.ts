@@ -190,7 +190,8 @@ export class NpcManager {
     actor.busy = true;
     actor.anchored = false;
     actor.mesh.position.set(x, 0, z);
-    actor.mesh.rotation.y = yaw;
+    actor.mesh.rotation.order = 'YXZ';
+    actor.mesh.rotation.set(0, yaw, 0);
     actor.vehicle.position.set(x, 0, z);
     actor.vehicle.velocity.set(0, 0, 0);
   }
@@ -202,8 +203,22 @@ export class NpcManager {
     actor.busy = true;
     actor.anchored = true;
     actor.mesh.position.set(x, 0, z);
-    actor.mesh.rotation.y = yaw;
+    actor.mesh.rotation.order = 'YXZ';
+    actor.mesh.rotation.set(0, yaw, 0);
     actor.vehicle.position.set(x, 0, z);
+    actor.vehicle.velocity.set(0, 0, 0);
+  }
+
+  /** Pin a person onto a moving playground seat. */
+  poseAt(id: string, pose: { x: number; y: number; z: number; yaw: number; pitch: number; roll: number }): void {
+    const actor = this.actors.find((item) => item.id === id);
+    if (!actor) return;
+    actor.busy = true;
+    actor.anchored = true;
+    actor.mesh.position.set(pose.x, pose.y, pose.z);
+    actor.mesh.rotation.order = 'YXZ';
+    actor.mesh.rotation.set(pose.pitch, pose.yaw, pose.roll);
+    actor.vehicle.position.set(pose.x, 0, pose.z);
     actor.vehicle.velocity.set(0, 0, 0);
   }
 
@@ -212,6 +227,10 @@ export class NpcManager {
     if (!actor) return;
     actor.busy = false;
     actor.anchored = false;
+    actor.mesh.rotation.order = 'YXZ';
+    actor.mesh.rotation.x = 0;
+    actor.mesh.rotation.z = 0;
+    actor.mesh.position.y = 0;
     actor.statusLine = undefined;
     actor.clipKey = undefined;
     actor.emoteAction?.fadeOut(0.15);

@@ -620,6 +620,32 @@ export class NpcLifeDirector {
     return this.lineFor(rideId)[0] === personId;
   }
 
+  queueMates(rideId: string, exceptId: string): string[] {
+    return this.lineFor(rideId).filter((id) => id !== exceptId);
+  }
+
+  /** Pull someone already in the park onto the next free seat. */
+  joinRide(personId: string, rideId: string): boolean {
+    const life = this.people.get(personId);
+    if (!life || life.phase === 'ride') return false;
+    const slot = this.freeSlot(rideId);
+    if (slot < 0) return false;
+    this.leaveQueue(personId);
+    life.zone = 'luna';
+    life.queuing = false;
+    life.lined = -1;
+    life.rideId = rideId;
+    life.rideSlot = slot;
+    life.headingToRide = true;
+    life.rideTries = 0;
+    life.eventId = null;
+    life.phase = 'walk';
+    life.seconds = 0;
+    const spot = anyApproach(rideId, slot);
+    this.plan(life, spot.x, spot.z);
+    return true;
+  }
+
   private lineFor(rideId: string): string[] {
     let line = this.lines.get(rideId);
     if (!line) {

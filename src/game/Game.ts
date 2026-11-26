@@ -40,7 +40,7 @@ import { setPreviewCharacter } from '../ui/choiceShots';
 import { STRENGTH_LABELS } from '../core/types';
 import { preloadCharacters } from '../world/AssetLoader';
 import { animateRides, rideById, sampleRide, setRideNow } from '../world/playground';
-import { animateLuna, lunaRideById, sampleLuna, setLunaNow } from '../world/lunaPark';
+import { FAIR_SNACKS, RIDE_TICKET_PRICE, animateLuna, lunaRideById, sampleLuna, setLunaNow } from '../world/lunaPark';
 import { dressZone, preloadProps } from '../world/PropLibrary';
 import { CollisionWorld, type CircleObstacle } from '../world/Collision';
 import { SchoolDayDirector } from '../characters/schoolDay';
@@ -129,6 +129,13 @@ export class Game {
   private poseMode: 'seat' | 'bed' | null = null;
   private playerRide: { id: string; slot: number; t: number } | null = null;
   private playerQueue: { id: string; t: number; settled: boolean } | null = null;
+  private lunaTickets = 0;
+  private fairMenu: 'snack' | 'line' | null = null;
+  private lineFriend: string | null = null;
+  private rideBuddy: string | null = null;
+  private rodeWithId: string | null = null;
+  private queueTalkRide: string | null = null;
+  private lineTalkGrace = 0;
   private parkClock = 0;
   private interactCooldown = 0;
   private album: AlbumEntry[] = [];
@@ -371,6 +378,7 @@ export class Game {
     this.homeLife.messLevel = save.messLevel;
     this.weeklyGoals = save.weeklyGoals;
     this.settings = { ...DEFAULT_SETTINGS, ...save.settings };
+    this.lunaTickets = save.lunaTickets ?? 0;
     this.economy.freePlay = this.settings.freePlay;
     this.selectedPlayerId = save.playerId;
     setPreviewCharacter(save.playerId);
@@ -491,12 +499,14 @@ export class Game {
       weather: this.gameClock.weather,
       weeklyGoals: this.weeklyGoals,
       settings: this.settings,
+      lunaTickets: this.lunaTickets,
     };
   }
 
   private goToZone(zone: ZoneId): void {
     this.schoolDay.stop();
     this.endPerformance(false);
+    if (this.fairMenu) this.closeFairMenu();
     if (this.playerQueue) this.leavePlayerQueue(true);
     if (this.playerRide) this.finishPlayerRide(false, true);
     if (this.player.posing) this.endSeat(false);
@@ -528,6 +538,13 @@ export class Game {
     if (zone === 'home' || zone === 'home_blue' || zone === 'home_yellow') this.homeTasks.begin();
     const homeZone = zone === 'home' || zone === 'home_blue' || zone === 'home_yellow';
     const indoor = homeZone || zone === 'shop';
+    if (zone === 'luna' && this.oncePer('luna-welcome')) {
+      this.ui.showCaption(
+        this.settings.freePlay
+          ? 'משחק חופשי: המתקנים פתוחים. דוכן החטיפים ליד השער.'
+          : `כרטיס למתקן בקופה, ${RIDE_TICKET_PRICE}₪. דוכן החטיפים ממול.`,
+      );
+    }
     this.player.cameraDistance = zone === 'luna' ? 12 : homeZone ? 7 : indoor ? 6.2 : zone === 'school' ? 8 : 9;
     this.player.cameraHeight = zone === 'luna' ? 6.6 : homeZone ? 4.3 : indoor ? 3.6 : zone === 'school' ? 4.6 : 5.5;
     this.colliders.rebuild(this.zones.group);
@@ -740,9 +757,13 @@ export class Game {
       if (this.sceneLock) {
         this.ui.showHint(this.performances.active ? 'הסצנה על המסך. כשהיא נעצרת, הבחירה למטה ממשיכה אותה.' : 'בחרו למטה איך הסצנה תיראה');
         this.player.consumeInteract();
+      } else if (this.fairMenu) {
+        this.ui.showHint(this.fairMenu === 'line' ? 'השיחה למטה' : 'התפריט למטה');
+        this.player.consumeInteract();
       } else if (this.playerQueue) {
         const place = this.life.queuePlace(this.playerQueue.id, 'player');
-        this.ui.showHint(place > 0 ? `[E] לצאת מהתור · מקום ${place}` : '[E] לצאת מהתור');
+        const tickets = this.settings.freePlay ? '' : ` · כרטיסים ${this.lunaTickets}`;
+        this.ui.showHint(place > 0 ? `[E] לצאת מהתור · מקום ${place}${tickets}` : `[E] לצאת מהתור${tickets}`);
         if (this.interactCooldown <= 0 && this.player.consumeInteract()) {
           this.leavePlayerQueue();
           this.interactCooldown = 0.45;
@@ -932,25 +953,47 @@ export class Game {
   private beginRide(id: string, slot: number): void {
     const ride = knownRide(id);
     if (!ride) return;
+    if (!this.hasRideTicket()) {
+      this.ui.showCaption(`צריך כרטיס. הקופה ליד השער, ${RIDE_TICKET_PRICE}₪ לסיבוב.`);
+      return;
+    }
+    let chosen = Number.isFinite(slot) ? slot : 0;
+    if (chosen < 0 || chosen >= ride.slots || this.life.slotTaken(id, chosen)) chosen = this.life.freeSlot(id);
+    if (chosen < 0) {
+      if (this.playerQueue?.id === id) this.ui.showCaption('המתקן מלא. נשארתם בתור.');
+      else this.standInQueue(id);
+      return;
+    }
     if (this.player.posing) this.endSeat(false);
     this.playerTasks.yield(this.player);
     if (this.playerQueue) this.leavePlayerQueue(true);
     if (this.playerRide) this.finishPlayerRide(false, true);
-    let chosen = Number.isFinite(slot) ? slot : 0;
-    if (chosen < 0 || chosen >= ride.slots || this.life.slotTaken(id, chosen)) chosen = this.life.freeSlot(id);
-    if (chosen < 0) {
-      this.standInQueue(id);
-      return;
-    }
+    this.spendRideTicket();
     this.life.claimRide(id, chosen);
+    const buddy = this.rideBuddy;
+    this.rideBuddy = null;
+    let together = '';
+    if (buddy) {
+      const name = this.npcName(buddy);
+      if (this.life.joinRide(buddy, id)) {
+        this.rodeWithId = buddy;
+        together = ` ${name} עולה איתכם.`;
+      } else {
+        together = ` אין מושב פנוי ל${name} בסיבוב הזה.`;
+      }
+    }
     this.playerRide = { id, slot: chosen, t: 0 };
     this.player.setPin(knownSample(id, chosen, 0));
-    this.ui.showCaption(`${ride.blurb}. E כדי לרדת`);
+    this.ui.showCaption(`${ride.blurb}.${together} E כדי לרדת`);
   }
 
   private standInQueue(id: string): void {
     const ride = knownRide(id);
     if (!ride) return;
+    if (!this.hasRideTicket()) {
+      this.ui.showCaption(`צריך כרטיס. הקופה ליד השער, ${RIDE_TICKET_PRICE}₪ לסיבוב.`);
+      return;
+    }
     if (this.player.posing) this.endSeat(false);
     this.playerTasks.yield(this.player);
     if (this.playerRide) this.finishPlayerRide(false, true);
@@ -959,12 +1002,15 @@ export class Game {
       this.ui.showCaption('התור מלא. נסו מתקן אחר.');
       return;
     }
+    this.queueTalkRide = null;
+    this.lineTalkGrace = 0;
     this.playerQueue = { id, t: 0, settled: false };
     const spot = this.life.queuePose(id, 'player');
     if (spot) {
       this.player.setPin({ x: spot.x, y: 0, z: spot.z, yaw: spot.yaw, pitch: 0, roll: 0, emote: 'idle', loop: true });
     }
-    this.ui.showCaption(`עמדתם בתור ל${ride.name}, מקום ${index + 1}. E כדי לצאת`);
+    const held = this.settings.freePlay ? '' : ` נשארו ${this.lunaTickets} כרטיסים.`;
+    this.ui.showCaption(`עמדתם בתור ל${ride.name}, מקום ${index + 1}.${held} E כדי לצאת`);
   }
 
   private leavePlayerQueue(quiet = false): void {
@@ -1018,6 +1064,12 @@ export class Game {
       ticket.t = 0;
       return;
     }
+    if (this.lineTalkGrace > 0) {
+      if (!paused && !this.blocked) this.lineTalkGrace = Math.max(0, this.lineTalkGrace - dt);
+      return;
+    }
+    if (this.maybeQueueTalk(paused)) return;
+    if (this.queueTalkRide !== ticket.id) return;
     if (paused || this.blocked || ticket.t < 0.85) return;
     if (!this.life.isQueueFront(ticket.id, 'player')) return;
     const slot = this.life.freeSlot(ticket.id);
@@ -1041,6 +1093,8 @@ export class Game {
     const current = this.playerRide;
     if (!current) return;
     const ride = knownRide(current.id);
+    const buddy = this.rodeWithId;
+    this.rodeWithId = null;
     this.playerRide = null;
     this.player.clearPin();
     this.life.releaseClaim();
@@ -1050,11 +1104,202 @@ export class Game {
       return;
     }
     this.memory.addStrengths(ride.awards);
+    if (buddy) {
+      this.memory.adjustFriendship(buddy, 2);
+      this.memory.addStrengths({ friendship: 1 });
+      this.memory.addDiary(buddy, this.gameClock.timeLabel, `עליתם יחד על ${ride.name}`);
+    }
     const gained = (Object.keys(ride.awards) as (keyof StrengthMap)[])
       .filter((key) => ride.awards[key])
       .map((key) => `${STRENGTH_LABELS[key]} +${ride.awards[key]}`)
       .join(', ');
-    this.ui.showCaption(`${ride.name}. ${gained}`);
+    const shared = buddy ? ` עליתם יחד עם ${this.npcName(buddy)}.` : '';
+    this.ui.showCaption(`${ride.name}.${shared} ${gained}`);
+  }
+
+  private hasRideTicket(): boolean {
+    return this.settings.freePlay || this.lunaTickets > 0;
+  }
+
+  private spendRideTicket(): void {
+    if (this.settings.freePlay) return;
+    this.lunaTickets = Math.max(0, this.lunaTickets - 1);
+  }
+
+  private closeFairMenu(): void {
+    this.fairMenu = null;
+    this.lineFriend = null;
+    this.blocked = false;
+    this.ui.hideSceneDock();
+  }
+
+  private payFair(amount: number): boolean {
+    if (this.settings.freePlay) return true;
+    if (this.economy.money < amount) return false;
+    this.economy.addMoney(-amount);
+    this.audio.playSfx('buy');
+    return true;
+  }
+
+  private buyRideTicket(): void {
+    if (this.settings.freePlay) {
+      this.ui.showCaption('במשחק חופשי לא צריך כרטיס. אפשר לעלות ישר.');
+      return;
+    }
+    if (this.lunaTickets >= 6) {
+      this.ui.showCaption('יש לכם 6 כרטיסים. קודם תעלו על מתקן.');
+      return;
+    }
+    if (!this.payFair(RIDE_TICKET_PRICE)) {
+      this.ui.showCaption(`כרטיס עולה ${RIDE_TICKET_PRICE}₪. אפשר להרוויח בסידור מדפים במכולת.`);
+      return;
+    }
+    this.lunaTickets += 1;
+    this.ui.showCaption(`קניתם כרטיס לסיבוב. יש לכם ${this.lunaTickets}.`);
+  }
+
+  private openSnackStand(): void {
+    this.fairMenu = 'snack';
+    this.blocked = true;
+    const price = (amount: number) => (this.settings.freePlay ? 'חינם' : `${amount}₪`);
+    this.ui.showBranches(
+      'דוכן חטיפים',
+      `אוכלים במקום, והרעב יורד. כסף: ${this.economy.money}₪.`,
+      FAIR_SNACKS.map((snack) => ({ id: snack.id, label: `${snack.name} — ${price(snack.price)}`, shot: 'eat' })),
+      'לא עכשיו',
+    );
+  }
+
+  private fairCompanion(rideId: string): { id: string; name: string } | null {
+    for (const id of this.life.queueMates(rideId, 'player')) {
+      const actor = this.npcs.actors.find((item) => item.id === id);
+      if (actor) return { id, name: actor.profile.name };
+    }
+    let best: { id: string; name: string; distance: number } | null = null;
+    for (const actor of this.npcs.actors) {
+      const distance = Math.hypot(actor.mesh.position.x - this.player.position.x, actor.mesh.position.z - this.player.position.z);
+      if (distance > 4.5) continue;
+      if (!best || distance < best.distance) best = { id: actor.id, name: actor.profile.name, distance };
+    }
+    return best ? { id: best.id, name: best.name } : null;
+  }
+
+  private maybeQueueTalk(paused: boolean): boolean {
+    const ticket = this.playerQueue;
+    if (!ticket || paused || this.blocked || this.fairMenu || this.sceneLock) return false;
+    if (ticket.t < 1.7 || this.queueTalkRide === ticket.id) return false;
+    const ride = knownRide(ticket.id);
+    if (!ride) return false;
+    this.queueTalkRide = ticket.id;
+    const friend = this.fairCompanion(ticket.id);
+    const tall = ticket.id === 'luna-wheel' || ticket.id === 'luna-drop';
+    this.lineFriend = friend?.id ?? null;
+    this.fairMenu = 'line';
+    this.blocked = true;
+    if (friend && tall) {
+      this.ui.showBranches(
+        `לפני ${ride.name}`,
+        `${friend.name} לידכם, והמתקן גבוה. «אתם עולים?»`,
+        [
+          { id: 'brave', label: 'לנשום ולעלות', shot: 'rope' },
+          { id: 'hand', label: `להישאר קרוב ל${friend.name}`, shot: 'organizer' },
+          { id: 'leave', label: 'לצאת מהתור', shot: 'hide' },
+        ],
+        'להמשיך לחכות',
+      );
+    } else if (friend) {
+      this.ui.showBranches(
+        `בתור ל${ride.name}`,
+        `${friend.name} כאן בתור. «נעלה ביחד?»`,
+        [
+          { id: 'together', label: `לעלות יחד עם ${friend.name}`, shot: 'ball' },
+          { id: 'story', label: 'לספר למה באתם', shot: 'organizer' },
+          { id: 'order', label: 'להגיד שהתור לפי הסדר', shot: 'watcher' },
+        ],
+        'להמשיך לחכות',
+      );
+    } else {
+      this.ui.showBranches(
+        `בתור ל${ride.name}`,
+        'התור זז לאט. אתם על הסימון, ואף אחד לא נדחף בינתיים.',
+        [
+          { id: 'wait', label: 'לחכות בשקט', shot: 'watcher' },
+          { id: 'watch', label: 'להסתכל מי הבא', shot: 'organizer' },
+          { id: 'leave', label: 'לצאת מהתור', shot: 'hide' },
+        ],
+        'להמשיך לחכות',
+      );
+    }
+    return true;
+  }
+
+  private resolveFair(choice: string): void {
+    const menu = this.fairMenu;
+    const friendId = this.lineFriend;
+    const friendName = friendId ? this.npcName(friendId) : '';
+    this.closeFairMenu();
+    if (menu === 'snack') {
+      if (choice === 'cancel') return;
+      const snack = FAIR_SNACKS.find((item) => item.id === choice);
+      if (!snack) return;
+      if (!this.payFair(snack.price)) {
+        this.ui.showCaption(`${snack.name} עולה ${snack.price}₪. אפשר להרוויח בסידור מדפים במכולת.`);
+        return;
+      }
+      this.needs.eat(snack.hunger);
+      const price = this.settings.freePlay ? 'בלי תשלום' : `ב־${snack.price}₪`;
+      this.ui.showCaption(`אכלתם ${snack.name} ${price}. הרעב ירד.`);
+      return;
+    }
+    if (menu !== 'line') return;
+    this.lineTalkGrace = 0.7;
+    if (choice === 'cancel' || choice === 'wait') {
+      if (choice === 'wait') {
+        this.memory.addStrengths({ restraint: 1 });
+        this.ui.showCaption('נשארתם על הסימון. איפוק +1.');
+      }
+      return;
+    }
+    if (choice === 'leave') {
+      this.lineTalkGrace = 0;
+      this.leavePlayerQueue();
+      return;
+    }
+    if (choice === 'together' && friendId) {
+      this.rideBuddy = friendId;
+      this.memory.adjustFriendship(friendId, 1);
+      this.memory.addStrengths({ friendship: 1 });
+      this.ui.showCaption(`קבעתם לעלות עם ${friendName}. כשיגיע התור, תעלו יחד.`);
+      return;
+    }
+    if (choice === 'story' && friendId) {
+      this.rideBuddy = friendId;
+      this.memory.adjustFriendship(friendId, 1);
+      this.memory.addStrengths({ speech: 1, friendship: 1 });
+      this.ui.showCaption(`סיפרתם ל${friendName} למה באתם. דיבור +1, חברות +1.`);
+      return;
+    }
+    if (choice === 'order') {
+      this.memory.addStrengths({ speech: 1, restraint: 1 });
+      this.ui.showCaption(friendName ? `התור נשאר לפי הסדר. ${friendName} נשאר במקום.` : 'התור נשאר לפי הסדר.');
+      return;
+    }
+    if (choice === 'brave') {
+      this.memory.addStrengths({ courage: 2 });
+      this.ui.showCaption('נשמתם. המתקן עדיין גבוה, ואתם נשארים בתור. אומץ +2.');
+      return;
+    }
+    if (choice === 'hand' && friendId) {
+      this.rideBuddy = friendId;
+      this.memory.adjustFriendship(friendId, 2);
+      this.memory.addStrengths({ courage: 1, friendship: 1 });
+      this.ui.showCaption(`${friendName} נשאר קרוב עד שהתור זז.`);
+      return;
+    }
+    if (choice === 'watch') {
+      this.memory.addStrengths({ speech: 1 });
+      this.ui.showCaption('הסתכלתם מי הבא בתור. אף אחד לא נדחף.');
+    }
   }
 
   private runAction(action: string, data: Record<string, unknown> = {}): void {
@@ -1102,6 +1347,12 @@ export class Game {
         break;
       case 'queue':
         this.standInQueue(String(data.ride ?? ''));
+        break;
+      case 'buyTicket':
+        this.buyRideTicket();
+        break;
+      case 'fairSnacks':
+        this.openSnackStand();
         break;
       case 'sleep':
         this.needs.sleep(70);
@@ -1455,6 +1706,10 @@ export class Game {
       return;
     }
     if (action.startsWith('branch:')) {
+      if (this.fairMenu) {
+        this.resolveFair(action.slice(7));
+        return;
+      }
       const id = action.slice(7);
       if (this.pendingTask) {
         const choice = this.pendingTask;

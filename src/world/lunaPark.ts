@@ -111,6 +111,14 @@ const PATH_LINKS: Array<[string, string]> = [
   ['low', 'south'],
 ];
 
+/** One ride, paid at the booth by the gate. Snacks are eaten at the stand. */
+export const RIDE_TICKET_PRICE = 4;
+export const FAIR_SNACKS = [
+  { id: 'ice', name: 'גלידה', price: 3, hunger: 28 },
+  { id: 'donut', name: 'סופגנייה', price: 3, hunger: 24 },
+  { id: 'candy', name: 'חטיף', price: 2, hunger: 16 },
+] as const;
+
 let rideNow = 0;
 
 export function setLunaNow(time: number): void {
@@ -787,7 +795,22 @@ function buildFair(parent: THREE.Group): void {
   booth.add(box(2.5, 0.16, 1.7, paint.red, -4.4, 1.55, 16.2));
   booth.add(box(1.3, 0.7, 0.06, paint.gold, -4.4, 1.05, 16.92));
   parent.add(booth);
-  parent.add(fairLabel('קופה', -4.4, 2.15, 16.2, 1.6));
+  parent.add(fairLabel(`קופה · ${RIDE_TICKET_PRICE}₪`, -4.4, 2.15, 16.2, 2.3));
+  const standX = 4.8;
+  const standZ = 15.6;
+  const stand = new THREE.Group();
+  stand.add(box(2.5, 1.05, 1.15, paint.white, standX, 0.52, standZ));
+  stand.add(box(2.8, 0.12, 1.4, paint.pink, standX, 1.08, standZ));
+  stand.add(box(2.8, 0.1, 1.5, paint.red, standX, 2.2, standZ));
+  for (const side of [-1, 1]) {
+    stand.add(box(0.12, 2.25, 0.12, paint.red, standX + side * 1.25, 1.12, standZ - 0.55));
+    stand.add(box(0.12, 2.25, 0.12, paint.red, standX + side * 1.25, 1.12, standZ + 0.55));
+  }
+  parent.add(stand);
+  parent.add(fairLabel('חטיפים', standX, 2.6, standZ, 2.1));
+  for (let i = 0; i <= 8; i++) {
+    bulb(parent, -4.2 + i * 1.15, 2.9, 17.35, i % 2 ? 0xf2c14e : 0xe38bb0);
+  }
   for (const [x, z, color] of [
     [-8, 18, 0xd64545],
     [-8.4, 18.35, 0xf2c14e],

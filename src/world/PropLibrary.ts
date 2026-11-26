@@ -441,6 +441,14 @@ function scatterZone(root: THREE.Group): void {
       { folder: 'holiday', model: 'snowman', x: -16, z: 12, height: 1.3, solid: true },
       { folder: 'holiday', model: 'tree-decorated', x: 18, z: 10, height: 2.4, solid: true },
     ],
+    'zone-luna': [
+      { folder: 'market', model: 'cash-register', x: -4.4, z: 16.45, y: 1.64, height: 0.32 },
+      { folder: 'food', model: 'ice-cream', x: 4.15, z: 15.55, y: 1.14, height: 0.36 },
+      { folder: 'food', model: 'donut', x: 4.85, z: 15.75, y: 1.14, height: 0.16 },
+      { folder: 'food', model: 'candy-bar', x: 5.45, z: 15.5, y: 1.14, height: 0.14 },
+      { folder: 'market', model: 'shopping-basket', x: 6.45, z: 16.5, height: 0.34 },
+      { folder: 'holiday', model: 'lights-colored', x: 0, z: 17.6, y: 2.55, height: 0.42 },
+    ],
     'zone-shop': [
       { folder: 'market', model: 'display-fruit', x: -7.6, z: -6.4, height: 1.2 },
       { folder: 'market', model: 'cash-register', x: 0.55, z: 4.55, y: 1.08, height: 0.28 },

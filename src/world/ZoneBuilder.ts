@@ -3,7 +3,7 @@ import { SCHOOL_SEATS, TEACHERS, schoolSpawns } from '../characters/schoolDay';
 import { box, cyl, mats } from './materials';
 import { encountersIn } from '../scenes/encounters';
 import { buildPlayground, playgroundSpots } from './playground';
-import { buildLunaPark, lunaQueues, lunaSpots } from './lunaPark';
+import { RIDE_TICKET_PRICE, buildLunaPark, lunaQueues, lunaSpots } from './lunaPark';
 import type { ZoneId } from '../core/types';
 
 export interface Interactable {
@@ -1297,11 +1297,27 @@ function buildLuna(): ZoneBuildResult {
       id: `queue-${line.id}`,
       label: line.label,
       position: new THREE.Vector3(line.x, 0, line.z),
-      radius: 1.35,
+      radius: 2.2,
       type: 'activity',
       data: { action: 'queue', ride: line.id },
     });
   }
+  interactables.push({
+    id: 'luna-ticket',
+    label: `לקנות כרטיס למתקן — ${RIDE_TICKET_PRICE}₪`,
+    position: new THREE.Vector3(-6.2, 0, 17.3),
+    radius: 2.4,
+    type: 'activity',
+    data: { action: 'buyTicket' },
+  });
+  interactables.push({
+    id: 'luna-snacks',
+    label: 'לקנות בדוכן החטיפים',
+    position: new THREE.Vector3(6.2, 0, 17.3),
+    radius: 2.4,
+    type: 'activity',
+    data: { action: 'fairSnacks' },
+  });
   interactables.push({
     id: 'exit-luna',
     label: 'לחזור לשכונה',

@@ -162,6 +162,8 @@ export interface GameSave {
   weather: Weather;
   weeklyGoals: WeeklyGoal[];
   settings: GameSettings;
+  /** Ride tickets bought at the luna park booth. Older saves omit this. */
+  lunaTickets?: number;
 }
 
 export interface GameSettings {

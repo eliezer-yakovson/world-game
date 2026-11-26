@@ -480,19 +480,162 @@ function decor(
   return mesh;
 }
 
+/** Noam's house: one long bedroom on the left, an open music room, and a kitchen tucked in the back. */
+function furnishBlue(group: THREE.Group, interactables: Interactable[]): void {
+  const interior = new THREE.MeshStandardMaterial({ color: 0xd5e6f5, roughness: 0.9 });
+  const cloth = new THREE.MeshStandardMaterial({ color: 0x2c5f96 });
+  addWall(group, interior, 'z', -1.2, -11.8, 11.8, [{ at: 0.6, width: 2.6 }]);
+  addWall(group, interior, 'x', -5.6, -1.0, 15.8, [{ at: 7.2, width: 2.5 }]);
+
+  roomFloor(group, 0x7f9cc4, -8.6, 0, 14.4, 23.2);
+  roomFloor(group, 0xd7ebf8, 7.3, 3.1, 16.6, 16.6);
+  roomFloor(group, 0xb7c9d6, 7.3, -8.7, 16.6, 6.4);
+
+  roomWindow(group, -15.82, 2.2, 2.2, 'z');
+  roomWindow(group, -15.82, -6.4, 1.6, 'z');
+  roomWindow(group, 15.82, 6.2, 2, 'z');
+  roomWindow(group, 8.2, -11.82, 2.2, 'x');
+
+  decor(group, box(3.2, 0.8, 1.15, cloth, 9.2, 0.42, 8.6), 'loungeSofa', 'width', 3.2);
+  decor(group, box(1.6, 0.42, 0.9, mats.wood, 9.2, 0.24, 6.7), 'tableCoffee', 'width', 1.6);
+  decor(group, box(0.85, 0.8, 0.85, cloth, 6.2, 0.42, 8.5), 'loungeChair', 'width', 0.9);
+  decor(group, box(0.85, 0.8, 0.85, cloth, 12.2, 0.42, 8.5), 'loungeChair', 'width', 0.9);
+  const rug = decor(group, box(4.6, 0.04, 2.8, new THREE.MeshStandardMaterial({ color: 0x1d4e89 }), 9.2, 0.03, 7.5), 'rugRectangle', 'width', 4.6);
+  rug.userData.noCollide = true;
+  decor(group, box(0.55, 0.7, 0.35, mats.metal, 14.55, 0.4, 5.4), 'televisionModern', 'height', 0.7);
+  decor(group, box(0.5, 0.35, 0.4, mats.wood, 14.2, 0.22, 9.1), 'radio', 'height', 0.4);
+  decor(group, box(0.7, 1.7, 0.55, mats.wood, 14.55, 0.88, 2.4), 'bookcaseOpen', 'height', 1.7);
+  decor(group, box(0.5, 0.75, 0.5, mats.wood, 3.4, 0.4, 8.6), 'pottedPlant', 'height', 0.85);
+  decor(group, box(0.4, 0.5, 0.4, mats.wood, 4.4, 0.28, 4.4), 'plantSmall2', 'height', 0.5);
+
+  decor(group, box(1.05, 1.85, 0.8, mats.metal, 14.4, 0.95, -10.2), 'kitchenFridge', 'height', 1.85);
+  group.add(box(5.4, 0.95, 0.7, mats.wood, 8.4, 0.5, -10.6));
+  const coffee = decor(group, box(0.4, 0.32, 0.35, mats.metal, 10.6, 1.14, -10.55), 'kitchenCoffeeMachine', 'height', 0.34);
+  coffee.userData.noCollide = true;
+  const toaster = decor(group, box(0.38, 0.26, 0.32, mats.metal, 7.4, 1.1, -10.55), 'toaster', 'height', 0.26);
+  toaster.userData.noCollide = true;
+  decor(group, box(1.5, 0.75, 0.95, mats.wood, 6.6, 0.4, -8.2), 'table', 'height', 0.75);
+  decor(group, box(0.5, 0.72, 0.5, mats.wood, 5.3, 0.38, -7.35), 'loungeChair', 'height', 0.72);
+  decor(group, box(0.5, 0.72, 0.5, mats.wood, 7.9, 0.38, -7.35), 'loungeChair', 'height', 0.72);
+
+  decor(group, box(2.4, 0.5, 1.4, new THREE.MeshStandardMaterial({ color: 0x9ec1e8 }), -10.2, 0.28, -7.2), 'bedSingle', 'width', 2.4);
+  decor(group, box(0.5, 0.5, 0.5, mats.wood, -12.6, 0.28, -8.6), 'lampRoundTable', 'height', 0.5);
+  const pillow = decor(group, box(0.45, 0.18, 0.55, new THREE.MeshStandardMaterial({ color: 0xd6ecff }), -9.4, 0.58, -7.2), 'pillowBlue', 'height', 0.2);
+  pillow.userData.noCollide = true;
+  decor(group, box(1.3, 0.75, 0.7, mats.wood, -13.4, 0.4, 4.6), 'table', 'height', 0.75);
+  decor(group, box(0.5, 0.7, 0.5, mats.wood, -12.2, 0.38, 5.5), 'loungeChair', 'height', 0.72);
+  decor(group, box(0.6, 1.8, 1.1, mats.wood, -14.7, 0.92, 1.1), 'bookcaseOpen', 'height', 1.8);
+  decor(group, box(0.55, 0.55, 0.45, mats.wood, -14.3, 0.3, 8.4), 'sideTable', 'height', 0.55);
+  const bedRug = box(3.2, 0.04, 2, new THREE.MeshStandardMaterial({ color: 0x24558a }), -10, 0.03, -5.4);
+  bedRug.userData.noCollide = true;
+  group.add(bedRug);
+  decor(group, box(0.45, 0.6, 0.45, mats.wood, -4.4, 0.32, -8.2), 'plantSmall1', 'height', 0.55);
+
+  interactables.push({
+    id: 'guest-look-blue',
+    label: 'להסתכל על החדר של נועם',
+    position: new THREE.Vector3(-4.4, 0, 0.8),
+    radius: 2,
+    type: 'activity',
+    data: { action: 'visitNoamRoom' },
+  });
+  interactables.push({
+    id: 'guest-snack-blue',
+    label: 'לבקש כיבוד קטן',
+    position: new THREE.Vector3(6.6, 0, -7.4),
+    radius: 1.8,
+    type: 'activity',
+    data: { action: 'guestSnack' },
+  });
+}
+
+/** Maya's house: a wide plant-filled parlor in front, the kitchen on the left, and her room on the right. */
+function furnishYellow(group: THREE.Group, interactables: Interactable[]): void {
+  const interior = new THREE.MeshStandardMaterial({ color: 0xf6e6bf, roughness: 0.9 });
+  const cloth = new THREE.MeshStandardMaterial({ color: 0xd0892b });
+  addWall(group, interior, 'x', 1.2, -15.8, 15.8, [
+    { at: -7.2, width: 2.5 },
+    { at: 7.4, width: 2.5 },
+  ]);
+  addWall(group, interior, 'z', 0.4, -11.8, 1.0, []);
+
+  roomFloor(group, 0xf3d48a, 0, 6.5, 31.4, 10.4);
+  roomFloor(group, 0xe0b56a, -7.8, -5.2, 15.4, 12.4);
+  roomFloor(group, 0xf0c2b0, 8.2, -5.2, 15, 12.4);
+
+  roomWindow(group, -7.2, 11.82, 1.8, 'x');
+  roomWindow(group, 8.4, 11.82, 1.8, 'x');
+  roomWindow(group, -15.82, -5.2, 1.8, 'z');
+  roomWindow(group, 15.82, -4.2, 1.8, 'z');
+
+  decor(group, box(3.1, 0.8, 1.15, cloth, -8.6, 0.42, 8.7), 'loungeSofa', 'width', 3.1);
+  decor(group, box(1.7, 0.55, 1.05, mats.wood, -1.4, 0.3, 6.5), 'table', 'width', 1.7);
+  decor(group, box(0.8, 0.75, 0.8, cloth, -3.5, 0.4, 6.5), 'loungeChair', 'width', 0.85);
+  decor(group, box(0.8, 0.75, 0.8, cloth, 0.7, 0.4, 6.5), 'loungeChair', 'width', 0.85);
+  decor(group, box(0.8, 0.75, 0.8, cloth, -1.4, 0.4, 8.3), 'loungeChair', 'width', 0.85);
+  const rug = decor(group, box(5.2, 0.04, 3.2, new THREE.MeshStandardMaterial({ color: 0xc47b2b }), -2.2, 0.03, 7), 'rugRectangle', 'width', 5.2);
+  rug.userData.noCollide = true;
+  decor(group, box(0.7, 1.7, 0.6, mats.wood, -14.4, 0.88, 7.2), 'bookcaseOpen', 'height', 1.7);
+  decor(group, box(0.5, 0.8, 0.5, mats.wood, 5.2, 0.42, 8.6), 'pottedPlant', 'height', 0.9);
+  decor(group, box(0.45, 0.6, 0.45, mats.wood, 11.2, 0.32, 7.4), 'plantSmall1', 'height', 0.6);
+  decor(group, box(0.4, 0.55, 0.4, mats.wood, 4.2, 0.3, 4.6), 'plantSmall2', 'height', 0.55);
+  decor(group, box(0.55, 0.4, 0.45, mats.wood, 13.2, 0.22, 8.8), 'radio', 'height', 0.4);
+  group.add(box(1.8, 0.42, 0.55, cloth, 8.6, 0.24, 10.35));
+
+  group.add(box(0.7, 0.95, 4.6, mats.wood, -14.7, 0.5, -5.4));
+  decor(group, box(0.9, 1.85, 0.75, mats.metal, -14.2, 0.95, -9.8), 'kitchenFridge', 'height', 1.85);
+  const microwave = decor(group, box(0.45, 0.3, 0.35, mats.metal, -14.55, 1.15, -3.4), 'kitchenMicrowave', 'height', 0.3);
+  microwave.userData.noCollide = true;
+  decor(group, box(1.6, 0.75, 1, mats.wood, -6.2, 0.4, -6.2), 'table', 'height', 0.75);
+  decor(group, box(0.5, 0.72, 0.5, mats.wood, -7.6, 0.38, -5.3), 'loungeChair', 'height', 0.72);
+  decor(group, box(0.5, 0.72, 0.5, mats.wood, -4.8, 0.38, -5.3), 'loungeChair', 'height', 0.72);
+  decor(group, box(0.5, 0.75, 0.5, mats.wood, -10.4, 0.4, -9.6), 'pottedPlant', 'height', 0.8);
+
+  decor(group, box(2.4, 0.5, 1.45, new THREE.MeshStandardMaterial({ color: 0xf2b8a0 }), 9.2, 0.28, -7.6), 'bedSingle', 'width', 2.4);
+  decor(group, box(0.5, 0.5, 0.5, mats.wood, 6.8, 0.28, -8.8), 'lampRoundTable', 'height', 0.5);
+  decor(group, box(0.5, 0.5, 0.5, mats.wood, 11.6, 0.28, -8.8), 'lampRoundTable', 'height', 0.5);
+  const pillow = decor(group, box(0.45, 0.18, 0.55, new THREE.MeshStandardMaterial({ color: 0xfff1e4 }), 8.6, 0.58, -7.6), 'pillow', 'height', 0.2);
+  pillow.userData.noCollide = true;
+  decor(group, box(1.2, 0.75, 0.7, mats.wood, 13.6, 0.4, -3.2), 'table', 'height', 0.75);
+  decor(group, box(0.5, 0.7, 0.5, mats.wood, 12.4, 0.38, -2.4), 'loungeChair', 'height', 0.7);
+  decor(group, box(0.6, 1.6, 0.9, mats.wood, 14.5, 0.82, -9.4), 'bookcaseOpen', 'height', 1.6);
+  const bedRug = box(3.4, 0.04, 2.2, new THREE.MeshStandardMaterial({ color: 0xd98b78 }), 9.2, 0.03, -5.6);
+  bedRug.userData.noCollide = true;
+  group.add(bedRug);
+
+  interactables.push({
+    id: 'guest-look-yellow',
+    label: 'להסתכל על הגינה מהחלון',
+    position: new THREE.Vector3(8.2, 0, 8.6),
+    radius: 2,
+    type: 'activity',
+    data: { action: 'visitMayaWindow' },
+  });
+  interactables.push({
+    id: 'guest-snack-yellow',
+    label: 'לבקש כיבוד קטן',
+    position: new THREE.Vector3(-6.2, 0, -5.2),
+    radius: 1.8,
+    type: 'activity',
+    data: { action: 'guestSnack' },
+  });
+}
+
 function buildHome(kind: 'player' | 'blue' | 'yellow'): ZoneBuildResult {
   const group = new THREE.Group();
   group.name = 'zone-home';
   const interactables: Interactable[] = [];
   const wallMat = kind === 'blue' ? mats.wallBlue : kind === 'yellow' ? mats.wallYellow : mats.wall;
-  const sofaColor = kind === 'blue' ? 0x3d6ea8 : kind === 'yellow' ? 0xd4a017 : 0x4a6fa5;
-  const interior = new THREE.MeshStandardMaterial({ color: 0xf4efe4, roughness: 0.9 });
+  group.userData.homeKind = kind;
 
   group.add(box(32.4, 0.2, 24.4, mats.floor, 0, -0.1, 0));
   addWall(group, wallMat, 'x', -12, -16, 16, []);
   addWall(group, wallMat, 'x', 12, -16, 16, [{ at: 0, width: 2.5 }]);
   addWall(group, wallMat, 'z', -16, -12, 12, []);
   addWall(group, wallMat, 'z', 16, -12, 12, []);
+  if (kind === 'player') {
+  const sofaColor = 0x4a6fa5;
+  const interior = new THREE.MeshStandardMaterial({ color: 0xf4efe4, roughness: 0.9 });
   // Bedroom and kitchen behind, kids' room, living room and bathroom in front. Doorways are wide enough to walk through.
   addWall(group, interior, 'x', -1, -15.8, 15.8, [
     { at: -8, width: 2.3 },
@@ -622,7 +765,6 @@ function buildHome(kind: 'player' | 'blue' | 'yellow'): ZoneBuildResult {
     data: { action: 'playScene', scene: 'build-together', task: 'playBlocks' },
   });
 
-  if (kind === 'player') {
     const album = box(1.5, 1, 0.06, mats.wood, -4.4, 1.7, -0.82);
     album.userData.noCollide = true;
     group.add(album);
@@ -687,23 +829,10 @@ function buildHome(kind: 'player' | 'blue' | 'yellow'): ZoneBuildResult {
       type: 'activity',
       data: { action: 'eat' },
     });
+  } else if (kind === 'blue') {
+    furnishBlue(group, interactables);
   } else {
-    interactables.push({
-      id: `guest-look-${kind}`,
-      label: kind === 'blue' ? 'להסתכל על החדר של נועם' : 'להסתכל על הגינה מהחלון',
-      position: new THREE.Vector3(-2, 0, 4.4),
-      radius: 2,
-      type: 'activity',
-      data: { action: kind === 'blue' ? 'visitNoamRoom' : 'visitMayaWindow' },
-    });
-    interactables.push({
-      id: `guest-snack-${kind}`,
-      label: 'לבקש כיבוד קטן',
-      position: new THREE.Vector3(6.6, 0, -4.8),
-      radius: 1.8,
-      type: 'activity',
-      data: { action: 'guestSnack' },
-    });
+    furnishYellow(group, interactables);
   }
 
   interactables.push({
@@ -730,12 +859,12 @@ function buildHome(kind: 'player' | 'blue' | 'yellow'): ZoneBuildResult {
         ]
       : kind === 'blue'
         ? [
-            { id: 'noam', position: new THREE.Vector3(-11, 0, 6.2) },
-            { id: 'dad', position: new THREE.Vector3(9, 0, -7.4) },
+            { id: 'noam', position: new THREE.Vector3(-8, 0, 1.8) },
+            { id: 'dad', position: new THREE.Vector3(4.2, 0, 3.2) },
           ]
         : [
-            { id: 'maya', position: new THREE.Vector3(-11.2, 0, 6.4) },
-            { id: 'neighbor', position: new THREE.Vector3(1.2, 0, 6.8) },
+            { id: 'maya', position: new THREE.Vector3(10.6, 0, -4) },
+            { id: 'neighbor', position: new THREE.Vector3(2.4, 0, 5.2) },
           ];
 
   return {

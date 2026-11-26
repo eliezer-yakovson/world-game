@@ -404,10 +404,12 @@ const PLACES: Place[] = [
   { id: 'home-living', zone: 'home', name: 'הסלון', x: 1.6, z: 6.2, yaw: 0.4, kind: 'home' },
   { id: 'home-kitchen', zone: 'home', name: 'המטבח', x: 8.2, z: -6.4, yaw: Math.PI, kind: 'home' },
   { id: 'home-kids', zone: 'home', name: 'חדר הילדים', x: -10.2, z: 5.8, yaw: 0.5, kind: 'home' },
-  { id: 'blue-living', zone: 'home_blue', name: 'הסלון הכחול', x: 1.4, z: 6, yaw: 0.2, kind: 'home' },
-  { id: 'blue-kids', zone: 'home_blue', name: 'החדר הכחול', x: -10, z: 5.6, yaw: 0.4, kind: 'home' },
-  { id: 'yellow-living', zone: 'home_yellow', name: 'הסלון הצהוב', x: 1.2, z: 6.2, yaw: 0, kind: 'home' },
-  { id: 'yellow-kids', zone: 'home_yellow', name: 'החדר הצהוב', x: -10.2, z: 5.6, yaw: 0.3, kind: 'home' },
+  { id: 'blue-living', zone: 'home_blue', name: 'הסלון הכחול', x: 4, z: 2, yaw: 0.4, kind: 'home' },
+  { id: 'blue-kids', zone: 'home_blue', name: 'החדר של נועם', x: -8, z: 1.2, yaw: 0.2, kind: 'home' },
+  { id: 'blue-music', zone: 'home_blue', name: 'פינת הנגינה', x: 12, z: 2.2, yaw: -0.6, kind: 'home' },
+  { id: 'yellow-living', zone: 'home_yellow', name: 'הסלון הצהוב', x: 6, z: 6.4, yaw: 0.2, kind: 'home' },
+  { id: 'yellow-kids', zone: 'home_yellow', name: 'החדר של מאיה', x: 8.2, z: -4.2, yaw: Math.PI, kind: 'home' },
+  { id: 'yellow-window', zone: 'home_yellow', name: 'החלון לגינה', x: 8.2, z: 8.4, yaw: 0, kind: 'home' },
 ];
 
 const EXIT: Record<ZoneId, { x: number; z: number }> = {

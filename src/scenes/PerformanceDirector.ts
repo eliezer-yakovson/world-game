@@ -322,6 +322,25 @@ function makeProp(kind: string): THREE.Group {
     const bush = new THREE.Mesh(new THREE.SphereGeometry(0.28, 12, 10), mat(0x2f6b3a));
     bush.position.y = 0.2;
     add(bush);
+  } else if (kind === 'bike') {
+    const wheel = (x: number) => {
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(0.16, 0.02, 6, 12), mat(0x222222));
+      ring.position.set(x, 0.16, 0);
+      add(ring);
+    };
+    wheel(-0.22);
+    wheel(0.22);
+    const frame = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.04, 0.04), mat(0x1d4e89));
+    frame.position.y = 0.24;
+    add(frame);
+  } else if (kind === 'puppy') {
+    const body = new THREE.Mesh(new THREE.SphereGeometry(0.16, 12, 10), mat(0x8b5a2b));
+    body.scale.set(1.3, 0.8, 0.9);
+    body.position.y = 0.16;
+    add(body);
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.09, 10, 8), mat(0x8b5a2b));
+    head.position.set(0.16, 0.24, 0);
+    add(head);
   } else {
     const box = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.2, 0.2), mat(0xc2b48a));
     box.position.y = 0.1;

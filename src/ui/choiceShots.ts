@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import type { SituationChoice } from '../core/types';
 import { pickClip } from '../characters/emotes';
+import { encounterShot } from '../scenes/encounters';
 import { takeCharacterModel } from '../world/AssetLoader';
 
 export type ShotMood =
@@ -198,6 +199,16 @@ export function recipeForSituation(situationId: string, choice: SituationChoice)
 }
 
 export function recipeForChoiceKey(key: string, label: string): ShotRecipe {
+  const encounter = encounterShot(key);
+  if (encounter) {
+    return {
+      key,
+      mood: encounter.mood as ShotMood,
+      prop: encounter.prop,
+      ground: encounter.ground,
+      friend: encounter.friend,
+    };
+  }
   if (key.includes('/')) {
     const slash = key.indexOf('/');
     const parent = key.slice(0, slash);
@@ -728,6 +739,11 @@ function buildProp(kind: string): THREE.Group {
     add(new THREE.Mesh(new THREE.SphereGeometry(0.12, 12, 10), mat(0xd8a15a)), 0, 0.14, 0);
     add(new THREE.Mesh(new THREE.ConeGeometry(0.04, 0.08, 4), mat(0xd8a15a)), -0.05, 0.26, 0.04);
     add(new THREE.Mesh(new THREE.ConeGeometry(0.04, 0.08, 4), mat(0xd8a15a)), 0.05, 0.26, 0.04);
+  } else if (kind === 'puppy') {
+    add(new THREE.Mesh(new THREE.SphereGeometry(0.14, 12, 10), mat(0x8b5a2b)), 0, 0.16, 0);
+    add(new THREE.Mesh(new THREE.SphereGeometry(0.08, 10, 8), mat(0x8b5a2b)), 0.16, 0.24, 0);
+    add(new THREE.Mesh(new THREE.ConeGeometry(0.03, 0.08, 4), mat(0x6b3f1d)), 0.12, 0.32, 0);
+    add(new THREE.Mesh(new THREE.ConeGeometry(0.03, 0.08, 4), mat(0x6b3f1d)), 0.2, 0.32, 0);
   } else if (kind === 'bike') {
     const wheel = (x: number) => {
       const ring = new THREE.Mesh(new THREE.TorusGeometry(0.1, 0.015, 6, 12), mat(0x222222));

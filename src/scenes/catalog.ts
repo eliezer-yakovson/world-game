@@ -1,4 +1,5 @@
 import type { StrengthMap } from '../core/types';
+import { encounterById } from './encounters';
 
 export interface Beat {
   t: number;
@@ -978,6 +979,8 @@ export function homeVariants(kind: string): SceneScript[] {
 }
 
 export function sceneById(id: string): SceneScript | undefined {
+  const encounter = encounterById(id);
+  if (encounter) return encounter;
   if (rooms[id]) return rooms[id];
   for (const script of Object.values(yard)) if (script.id === id) return script;
   for (const list of Object.values(homeTasks)) {

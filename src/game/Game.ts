@@ -32,6 +32,7 @@ import { ZooLifeSystem } from '../systems/ZooLifeSystem';
 import { HomeLifeSystem } from '../systems/HomeLifeSystem';
 import { HomeTaskDirector, PlayerTaskDirector, progressText, taskLine, tasksForPlayer, type TaskChoice } from '../characters/homeTasks';
 import { homeVariants, sceneById, yardScene, type SceneScript } from '../scenes/catalog';
+import { encounterById, encountersIn } from '../scenes/encounters';
 import { PerformanceDirector } from '../scenes/PerformanceDirector';
 import { AudioDirector } from '../audio/AudioDirector';
 import { UIManager } from '../ui/UIManager';
@@ -94,6 +95,10 @@ export class Game {
   private taskMenu = false;
   private performances!: PerformanceDirector;
   private sceneLock = false;
+  private encounterDwell = 0;
+  private encounterCooldown = 8;
+  private seenEncounters = new Set<string>();
+  private staged: string[] = [];
   private homePaused = false;
   private pendingTask: TaskChoice | null = null;
   private audio = new AudioDirector();
@@ -487,6 +492,7 @@ export class Game {
     this.homeTasks.end();
     this.unlockedZones = unlockZone(this.unlockedZones, zone);
     const built = this.zones.load(zone, this.scene);
+    this.encounterDwell = 0;
     this.player.position.copy(built.spawn);
     if (!this.life.seeded) this.life.seed(this.npcProfiles, this.gameClock.hour);
     if (zone === 'home' && this.pendingGuestId) {
@@ -743,8 +749,11 @@ export class Game {
       }
 
       this.refreshHud();
+      this.encounterCooldown = Math.max(0, this.encounterCooldown - dt);
+      if (!worldPaused) this.encounterDwell += dt;
       this.checkCalendarBeats();
       this.checkScriptedMoments();
+      this.maybeEncounter();
 
       if (this.gameClock.minuteOfHour === 0 && this.oncePer(`auto-${this.gameClock.day}-${this.gameClock.hour}`)) {
         this.saves.autosave(this.snapshot());
@@ -1006,6 +1015,9 @@ export class Game {
       case 'recessTag':
         this.blocked = true;
         this.ui.showRecessMenu();
+        break;
+      case 'encounter':
+        this.startEncounter(String(data.scene ?? ''));
         break;
       case 'playScene': {
         const script = sceneById(String(data.scene ?? ''));
@@ -1583,6 +1595,7 @@ export class Game {
   }
 
   private beginPerformance(script: SceneScript, movePlayer: boolean, gather: boolean): void {
+    if (gather) this.stageCast(script);
     if (this.atHome() && gather) {
       this.homeTasks.end();
       this.homePaused = true;
@@ -1593,9 +1606,65 @@ export class Game {
     this.performances.start(script, movePlayer, gather);
   }
 
+  private startEncounter(id: string): void {
+    if (this.performances.active || this.situations.active || this.sceneLock) return;
+    const script = encounterById(id);
+    if (!script) return;
+    this.seenEncounters.add(id);
+    this.encounterDwell = 0;
+    this.encounterCooldown = 42;
+    if (this.player.posing) this.endSeat(false);
+    this.playerTasks.yield(this.player);
+    this.beginPerformance(script, false, true);
+  }
+
+  /** A scene can start on its own once you have been in a place for a while. */
+  private maybeEncounter(): void {
+    if (this.sceneLock || this.blocked || this.performances.active || this.situations.active) return;
+    if (this.player.pinned || this.player.posing || this.player.taskHold || this.taskMenu || this.npcs.isHeld) return;
+    if (this.encounterDwell < 12 || this.encounterCooldown > 0) return;
+    const zone = this.zones.current;
+    const all = encountersIn(zone);
+    if (!all.length) return;
+    let pool = all.filter((item) => !this.seenEncounters.has(item.id));
+    if (!pool.length) {
+      for (const item of all) this.seenEncounters.delete(item.id);
+      pool = all;
+    }
+    const pick = pool[Math.floor(Math.random() * pool.length)];
+    this.startEncounter(pick.id);
+  }
+
+  private stageCast(script: SceneScript): void {
+    this.clearStaged();
+    const ids = new Set<string>();
+    const beats = [...script.beats, ...script.follows.flatMap((follow) => follow.beats)];
+    for (const step of beats) {
+      for (const [id] of step.cast ?? []) ids.add(id);
+    }
+    const origin = this.player.position;
+    let index = 0;
+    for (const id of ids) {
+      index += 1;
+      if (this.npcs.actors.some((actor) => actor.id === id)) continue;
+      this.npcs.spawnOne(
+        this.zones.group,
+        { id, position: new THREE.Vector3(origin.x + index * 0.35, 0, origin.z + 1.1) },
+        this.memory,
+      );
+      if (this.life.zoneOf(id) !== this.zones.current) this.staged.push(id);
+    }
+  }
+
+  private clearStaged(): void {
+    for (const id of this.staged) this.npcs.removeActor(id);
+    this.staged = [];
+  }
+
   private finishPerformance(awards: Partial<StrengthMap> | undefined, title: string): void {
     this.sceneLock = false;
     this.blocked = false;
+    this.clearStaged();
     if (!this.playerTasks.active) this.player.releaseHold();
     if (this.homePaused) {
       this.homePaused = false;
@@ -1605,8 +1674,8 @@ export class Game {
     if (awards) {
       const gained = this.memory.addStrengths(awards);
       const bits = (Object.entries(gained) as Array<[keyof StrengthMap, number]>)
-        .filter(([, value]) => value > 0)
-        .map(([key, value]) => `${STRENGTH_LABELS[key]} +${value}`);
+        .filter(([, value]) => value !== 0)
+        .map(([key, value]) => `${STRENGTH_LABELS[key]} ${value > 0 ? '+' : ''}${value}`);
       this.ui.showCaption(bits.length ? `${title}. ${bits.join(' · ')}` : `${title} נגמרה.`);
       this.audio.playSfx('success');
       return;
@@ -1617,6 +1686,7 @@ export class Game {
   /** Leaves a scene without the closing caption. Used when the zone changes. */
   private endPerformance(resumeHome: boolean): void {
     this.performances.stop(false);
+    this.clearStaged();
     this.sceneLock = false;
     this.pendingTask = null;
     this.ui.hideSceneDock();

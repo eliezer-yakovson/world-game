@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { SCHOOL_SEATS, TEACHERS, schoolSpawns } from '../characters/schoolDay';
 import { box, cyl, mats } from './materials';
+import { encountersIn } from '../scenes/encounters';
 import { buildPlayground, playgroundSpots } from './playground';
 import type { ZoneId } from '../core/types';
 
@@ -209,6 +210,26 @@ function zebra(group: THREE.Group, x: number, z: number, along: 'x' | 'z', mat: 
   }
 }
 
+function addEncounters(zone: ZoneId, group: THREE.Group, interactables: Interactable[]): void {
+  for (const encounter of encountersIn(zone)) {
+    const { x, z } = encounter.spot;
+    const pole = box(0.08, 1.15, 0.08, mats.wood, x, 0.55, z);
+    pole.name = `encounter-${encounter.id}`;
+    pole.userData.noCollide = true;
+    const flag = box(0.32, 0.16, 0.04, mats.play, x + 0.18, 1.02, z);
+    flag.userData.noCollide = true;
+    group.add(pole, flag);
+    interactables.push({
+      id: `encounter-${encounter.id}`,
+      label: encounter.label,
+      position: new THREE.Vector3(x, 0, z),
+      radius: 1.7,
+      type: 'activity',
+      data: { action: 'encounter', scene: encounter.id },
+    });
+  }
+}
+
 function buildNeighborhood(): ZoneBuildResult {
   const group = new THREE.Group();
   group.name = 'zone-neighborhood';
@@ -373,6 +394,7 @@ function buildNeighborhood(): ZoneBuildResult {
   });
 
   const carLanes = neighborhoodLanes();
+  addEncounters('neighborhood', group, interactables);
 
   return {
     group,
@@ -851,6 +873,9 @@ function buildHome(kind: 'player' | 'blue' | 'yellow'): ZoneBuildResult {
   group.add(box(0.16, 3.3, 0.24, mats.wood, 1.35, 1.65, 11.72));
   group.add(box(0.08, 0.08, 0.1, mats.metal, 0.55, 1.2, 11.6));
 
+  const homeZone: ZoneId = kind === 'player' ? 'home' : kind === 'blue' ? 'home_blue' : 'home_yellow';
+  addEncounters(homeZone, group, interactables);
+
   const npcSpawns =
     kind === 'player'
       ? [
@@ -956,6 +981,7 @@ function buildSchool(): ZoneBuildResult {
     type: 'door',
     data: { target: 'neighborhood' },
   });
+  addEncounters('school', group, interactables);
 
   return {
     group,
@@ -1024,6 +1050,7 @@ function buildShop(): ZoneBuildResult {
     type: 'door',
     data: { target: 'neighborhood' },
   });
+  addEncounters('shop', group, interactables);
 
   return {
     group,
@@ -1109,6 +1136,7 @@ function buildPark(): ZoneBuildResult {
     type: 'door',
     data: { target: 'neighborhood' },
   });
+  addEncounters('park', group, interactables);
 
   return {
     group,
@@ -1376,6 +1404,7 @@ function buildZoo(): ZoneBuildResult {
     type: 'door',
     data: { target: 'neighborhood' },
   });
+  addEncounters('zoo', group, interactables);
 
   return {
     group,

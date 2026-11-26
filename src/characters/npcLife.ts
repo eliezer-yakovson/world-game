@@ -566,6 +566,10 @@ export class NpcLifeDirector {
     for (const profile of profiles) this.ensure(profile.id, hour, profile.strengths);
   }
 
+  zoneOf(id: string): ZoneId | null {
+    return this.people.get(id)?.zone ?? null;
+  }
+
   bring(id: string, zone: ZoneId, hour: number): void {
     const life = this.ensure(id, hour);
     const places = placesIn(zone);

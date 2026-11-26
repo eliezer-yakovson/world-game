@@ -6,6 +6,7 @@ import type { MemoryStore } from '../core/MemoryStore';
 import { bus } from '../core/EventBus';
 import { takeCharacterModel } from '../world/AssetLoader';
 import { pickClip } from './emotes';
+import { routineFor } from './schoolDay';
 
 export interface NpcActor {
   id: string;
@@ -159,6 +160,13 @@ export class NpcManager {
     actor.clipKey = key;
   }
 
+  /** Follow a scripted path. Other people do not push them off it. */
+  guide(id: string, x: number, z: number, yaw: number): void {
+    this.moveBusy(id, x, z, yaw);
+    const actor = this.actors.find((item) => item.id === id);
+    if (actor) actor.anchored = true;
+  }
+
   /** Walk toward a chore. Collision may still nudge them. */
   moveBusy(id: string, x: number, z: number, yaw: number): void {
     const actor = this.actors.find((item) => item.id === id);
@@ -252,7 +260,7 @@ export class NpcManager {
   talkTo(actor: NpcActor, memory: MemoryStore, clock: GameClock): string {
     const trust = memory.trust[actor.id] ?? 50;
     const mood = memory.moods[actor.id] ?? 'neutral';
-    let line = actor.statusLine ?? `שלום! אני ${actor.profile.name}.`;
+    let line = actor.statusLine ?? routineFor(actor.id, clock.hour, clock.minuteOfHour);
     if (!actor.statusLine) {
       if (mood === 'happy') line = `${actor.profile.name}: היי! כיף לראות אותך.`;
       if (mood === 'angry') line = `${actor.profile.name}: עכשיו קצת קשה לי…`;
@@ -268,11 +276,7 @@ export class NpcManager {
   }
 
   private routineText(id: string, hour: number): string {
-    if (hour < 8) return 'מתעורר/ת בבוקר';
-    if (hour < 14) return id === 'teacher' ? 'מלמדת בכיתה' : 'בפעילות יומית';
-    if (hour < 18) return 'מסתובב/ת בשכונה או בפארק';
-    if (hour < 21) return 'בבית לקראת ערב';
-    return 'נרגע/ת לפני שינה';
+    return routineFor(id, hour, 0);
   }
 
   private createMesh(

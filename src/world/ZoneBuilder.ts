@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { SCHOOL_SEATS, TEACHERS, schoolSpawns } from '../characters/schoolDay';
 import { box, cyl, mats } from './materials';
 import type { ZoneId } from '../core/types';
 
@@ -760,43 +761,30 @@ function buildSchool(): ZoneBuildResult {
   group.add(box(0.22, 2.7, 0.22, mats.wood, 0.6, 1.35, -0.2));
   group.add(box(17.4, 0.16, 0.22, mats.wood, -8, 2.7, -0.2));
   group.add(box(0.22, wallH, 6.2, mats.wall, -8, wallH / 2, -8.8));
-  group.add(box(2.2, 2.5, 0.12, new THREE.MeshStandardMaterial({ color: 0x2f6b4f }), -12.2, 1.7, -11.9));
-  group.add(box(2.2, 2.5, 0.12, new THREE.MeshStandardMaterial({ color: 0x245c8a }), -3.6, 1.7, -11.9));
+  for (const teacher of TEACHERS) {
+    const color = teacher.id === 'teacher' ? 0x2f6b4f : 0x245c8a;
+    group.add(box(2.2, 2.5, 0.12, new THREE.MeshStandardMaterial({ color }), teacher.x, 1.7, -11.9));
+  }
   // Yard
   group.add(box(24, 0.15, 18, mats.grass, 12, 0.02, 5));
-  group.add(box(1.2, 0.3, 1.2, mats.play, 6, 0.3, 2));
+  group.add(box(1.2, 0.3, 1.2, mats.play, 3.2, 0.3, 1.2));
   group.add(cyl(0.8, 0.2, mats.sand, 10, 0.15, 6));
 
-  for (const roomX of [-12.2, -3.8]) {
-    for (let row = 0; row < 2; row++) {
-      for (let col = 0; col < 2; col++) {
-        const dx = roomX + (col - 0.5) * 1.8;
-        const dz = -8.6 + row * 1.7;
-        const desk = box(1.15, 0.7, 0.7, mats.wood, dx, 0.35, dz);
-        desk.userData.dress = { prop: 'table', fit: 'height', value: 0.72 };
-        desk.userData.noCollide = false;
-        group.add(desk);
-        group.add(box(0.42, 0.42, 0.42, mats.play, dx, 0.22, dz + 0.55));
-      }
-    }
+  for (const seat of SCHOOL_SEATS) {
+    const desk = box(1.15, 0.7, 0.7, mats.wood, seat.x, 0.35, seat.deskZ);
+    desk.userData.dress = { prop: 'table', fit: 'height', value: 0.72 };
+    group.add(desk);
+    group.add(box(0.42, 0.42, 0.42, mats.play, seat.x, 0.22, seat.deskZ + 0.52));
+    if (!seat.forPlayer) continue;
+    interactables.push({
+      id: `sit-${seat.id}`,
+      label: 'לשבת ליד השולחן',
+      position: new THREE.Vector3(seat.sitX, 0, seat.sitZ + 0.8),
+      radius: 1.15,
+      type: 'activity',
+      data: { action: 'sitDesk', x: seat.sitX, z: seat.sitZ, standZ: seat.sitZ + 0.85, yaw: seat.yaw },
+    });
   }
-
-  interactables.push({
-    id: 'sit-desk-left',
-    label: 'לשבת ליד השולחן',
-    position: new THREE.Vector3(-13.1, 0, -7.35),
-    radius: 1.35,
-    type: 'activity',
-    data: { action: 'sitDesk', x: -13.1, z: -8.05, standZ: -7.2, yaw: Math.PI },
-  });
-  interactables.push({
-    id: 'sit-desk-right',
-    label: 'לשבת ליד השולחן',
-    position: new THREE.Vector3(-4.7, 0, -7.35),
-    radius: 1.35,
-    type: 'activity',
-    data: { action: 'sitDesk', x: -4.7, z: -8.05, standZ: -7.2, yaw: Math.PI },
-  });
   interactables.push({
     id: 'classroom',
     label: 'להיכנס לשיעור',
@@ -843,12 +831,7 @@ function buildSchool(): ZoneBuildResult {
     group,
     interactables,
     spawn: new THREE.Vector3(-8, 0, 4),
-    npcSpawns: [
-      { id: 'teacher', position: new THREE.Vector3(-12.4, 0, -10.4) },
-      { id: 'noam', position: new THREE.Vector3(7, 0, 3) },
-      { id: 'maya', position: new THREE.Vector3(9, 0, 5) },
-      { id: 'dani', position: new THREE.Vector3(5, 0, 6) },
-    ],
+    npcSpawns: schoolSpawns(),
   };
 }
 

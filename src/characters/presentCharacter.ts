@@ -3,7 +3,7 @@ import { lookFor, type CharacterLook } from './characterLooks';
 import { dressCharacter } from './outfits';
 
 const TOP_HAT_MIN_Y = 2.95;
-const COVERED_HAIR = new Set(['mom', 'dad', 'ori', 'roni', 'brother', 'shopkeeper', 'noam', 'dani']);
+const COVERED_HAIR = new Set(['mom', 'dad', 'ori', 'roni', 'brother', 'shopkeeper', 'noam', 'dani', 'lior', 'eitan', 'aviv', 'yosef', 'teacher_david']);
 
 /**
  * The character GLBs were exported without textures. Skin is a near-black factor,

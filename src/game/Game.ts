@@ -40,6 +40,7 @@ import { STRENGTH_LABELS } from '../core/types';
 import { preloadCharacters } from '../world/AssetLoader';
 import { dressZone, preloadProps } from '../world/PropLibrary';
 import { CollisionWorld, type CircleObstacle } from '../world/Collision';
+import { SchoolDayDirector } from '../characters/schoolDay';
 
 const ALL_ZONES: ZoneId[] = [
   'neighborhood',
@@ -76,6 +77,10 @@ export class Game {
   private zoneReady = false;
   private homeLife = new HomeLifeSystem();
   private homeTasks = new HomeTaskDirector(this.npcs, () => this.homeLife.decreaseMess(1));
+  private schoolDay = new SchoolDayDirector(this.npcs, {
+    add: (object) => this.zones.group.add(object),
+    remove: (object) => this.zones.group.remove(object),
+  });
   private playerTasks = new PlayerTaskDirector({
     onSweep: () => this.homeLife.decreaseMess(1),
     onEat: () => this.needs.eat(12),
@@ -466,6 +471,7 @@ export class Game {
   }
 
   private goToZone(zone: ZoneId): void {
+    this.schoolDay.stop();
     this.endPerformance(false);
     if (this.player.posing) this.endSeat(false);
     const pausedTask = this.playerTasks.yield(this.player);
@@ -682,6 +688,13 @@ export class Game {
       this.homeTasks.update(dt);
       this.performances.update(dt);
       if (!this.npcs.isHeld) this.keepApart();
+      if (this.zones.current === 'school') {
+        this.schoolDay.setPaused(this.performances.active || this.sceneLock);
+        const bell = this.schoolDay.update(dt, this.gameClock);
+        if (bell && !this.sceneLock) this.ui.showCaption(bell, 2600);
+      } else {
+        this.schoolDay.stop();
+      }
       this.traffic.update(dt);
       if (this.zones.current === 'zoo') this.zooLife.update(dt);
       if (this.zones.current === 'home') this.homeLife.maybePlayMess(0.0008 * this.timeAccel);

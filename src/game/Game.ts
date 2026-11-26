@@ -35,6 +35,7 @@ import { homeVariants, sceneById, yardScene, type SceneScript } from '../scenes/
 import { PerformanceDirector } from '../scenes/PerformanceDirector';
 import { AudioDirector } from '../audio/AudioDirector';
 import { UIManager } from '../ui/UIManager';
+import { setPreviewCharacter } from '../ui/choiceShots';
 import { STRENGTH_LABELS } from '../core/types';
 import { preloadCharacters } from '../world/AssetLoader';
 import { dressZone, preloadProps } from '../world/PropLibrary';
@@ -279,6 +280,7 @@ export class Game {
     const profile = this.players.find((p) => p.id === playerId);
     if (!profile) return;
     this.selectedPlayerId = playerId;
+    setPreviewCharacter(playerId);
     this.settings = { ...this.settings, freePlay };
     const save = createEmptySave(playerId);
     save.strengths = { ...profile.strengths };
@@ -329,6 +331,7 @@ export class Game {
     this.settings = { ...DEFAULT_SETTINGS, ...save.settings };
     this.economy.freePlay = this.settings.freePlay;
     this.selectedPlayerId = save.playerId;
+    setPreviewCharacter(save.playerId);
     const profile = this.players.find((p) => p.id === save.playerId);
     if (profile) {
       this.player.setColor(profile.color);
@@ -1264,7 +1267,7 @@ export class Game {
       this.ui.showBranches(
         choice.title,
         'בחרו מה בדיוק קורה. זה נשאר על המסך, עם חפצים, ולא נגמר במשפט אחד.',
-        variants.map((variant) => ({ id: variant.id, label: variant.title })),
+        variants.map((variant) => ({ id: variant.id, label: variant.title, shot: variant.id })),
         'רק להתחיל, בלי סיפור',
       );
       return;

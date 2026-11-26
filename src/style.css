@@ -504,13 +504,62 @@ button:disabled {
 }
 
 .task-panel {
-  max-width: 760px;
+  max-width: 920px;
+  max-height: 88vh;
+  overflow: auto;
+}
+
+.choice-cards {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+
+.overlay .choice-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  overflow: visible;
+}
+
+.choice-card {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  width: 196px;
+  flex: 0 0 196px;
+  padding: 6px;
+  text-align: center;
+}
+
+.overlay .choice-card {
+  width: auto;
+  flex: none;
+}
+
+.choice-card img {
+  width: 100%;
+  height: 120px;
+  object-fit: cover;
+  border-radius: 8px;
+  background: #d7e4c8;
+  pointer-events: none;
+}
+
+.choice-card span {
+  font-size: 0.86rem;
+  line-height: 1.35;
+}
+
+.choice-card.selected {
+  border-color: var(--accent);
+  background: rgba(61, 155, 143, 0.28);
 }
 
 .task-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
+  display: block;
   margin-top: 12px;
 }
 
@@ -554,8 +603,23 @@ button:disabled {
 }
 
 .scene-dock .panel {
-  max-height: 250px;
-  padding: 16px 18px;
+  max-width: 960px;
+  max-height: 440px;
+  padding: 14px 16px;
+}
+
+.scene-dock .choice-cards {
+  flex-wrap: wrap;
+  overflow: visible;
+}
+
+.scene-dock .choice-card {
+  width: 168px;
+  flex: 1 1 168px;
+}
+
+.scene-dock .choice-card img {
+  height: 104px;
 }
 
 .scene-dock .btn-row {
@@ -583,7 +647,7 @@ button:disabled {
 }
 
 #ui-root:has(.scene-dock.visible) .caption {
-  bottom: 290px;
+  bottom: 420px;
 }
 
 .weather-rain {

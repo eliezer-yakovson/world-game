@@ -4,7 +4,7 @@ import type { Beat, FollowUp, SceneScript } from './catalog';
 
 export interface StageHost {
   caption(text: string, ms: number): void;
-  choices(title: string, note: string, options: Array<{ id: string; label: string }>, cancel: string): void;
+  choices(title: string, note: string, options: Array<{ id: string; label: string; shot?: string }>, cancel: string): void;
   clearChoices(): void;
   playerAt(): { x: number; z: number; yaw: number };
   placePlayer(x: number, z: number): void;
@@ -141,7 +141,7 @@ export class PerformanceDirector {
     this.host.choices(
       script.title,
       'הסצנה נשארת פתוחה. בחרו איך היא ממשיכה.',
-      script.follows.map((item) => ({ id: item.id, label: item.label })),
+      script.follows.map((item) => ({ id: item.id, label: item.label, shot: `${script.id}/${item.id}` })),
       'לסיים כאן',
     );
   }

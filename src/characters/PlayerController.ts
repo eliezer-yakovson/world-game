@@ -28,6 +28,10 @@ export class PlayerController {
   taskHold = false;
   private heldKey = '';
   private fallbackColor = 0x3d9b8f;
+  private readonly aimForward = new THREE.Vector3();
+  private readonly aimRight = new THREE.Vector3();
+  private readonly wish = new THREE.Vector3();
+  private readonly stepPos = new THREE.Vector3();
   private pose: {
     origin: THREE.Vector3;
     target: THREE.Vector3 | null;
@@ -304,25 +308,25 @@ export class PlayerController {
     if (this.hasBike) moveSpeed *= 1.8;
     else if (this.hasScooter) moveSpeed *= 1.5;
 
-    const forward = new THREE.Vector3(-Math.sin(this.yaw), 0, -Math.cos(this.yaw));
-    const right = new THREE.Vector3(Math.cos(this.yaw), 0, -Math.sin(this.yaw));
-    const move = new THREE.Vector3();
-    move.addScaledVector(forward, -inputZ);
-    move.addScaledVector(right, inputX);
-    this.moving = move.lengthSq() > 0;
+    this.aimForward.set(-Math.sin(this.yaw), 0, -Math.cos(this.yaw));
+    this.aimRight.set(Math.cos(this.yaw), 0, -Math.sin(this.yaw));
+    this.wish.set(0, 0, 0);
+    this.wish.addScaledVector(this.aimForward, -inputZ);
+    this.wish.addScaledVector(this.aimRight, inputX);
+    this.moving = this.wish.lengthSq() > 0;
     if (this.moving) {
-      move.normalize();
+      this.wish.normalize();
       const radius = 0.46;
       const travel = moveSpeed * dt;
       const slices = Math.max(1, Math.ceil(travel / 0.04));
       const slice = travel / slices;
-      const pos = this.position.clone();
+      this.stepPos.copy(this.position);
       for (let i = 0; i < slices; i++) {
-        const next = pos.clone().addScaledVector(move, slice);
-        pos.copy(resolve ? resolve(next, radius) : next);
+        this.stepPos.addScaledVector(this.wish, slice);
+        if (resolve) this.stepPos.copy(resolve(this.stepPos, radius));
       }
-      this.position.copy(pos);
-      this.mesh.rotation.y = Math.atan2(move.x, move.z);
+      this.position.copy(this.stepPos);
+      this.mesh.rotation.y = Math.atan2(this.wish.x, this.wish.z);
     }
 
     if (this.mixer) {

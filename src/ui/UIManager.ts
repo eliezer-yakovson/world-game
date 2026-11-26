@@ -33,6 +33,10 @@ export class UIManager {
   private hudButtons: HTMLDivElement;
   private zoneLabel = 'הבית';
   private captionTimer = 0;
+  private clockText = '';
+  private moneyText = '';
+  private rainOn = false;
+  private hintShown: string | null | undefined = undefined;
 
   onChoice?: (choiceId: string) => void;
   onBreathe?: () => void;
@@ -118,18 +122,38 @@ export class UIManager {
 
   updateClock(dayLabel: string, time: string, weather: string, zone: ZoneId, money?: number): void {
     const w = weather === 'rain' ? 'גשום' : weather === 'cloudy' ? 'מעונן' : 'בהיר';
-    this.clockEl.textContent = `${dayLabel} · ${time} · ${w}`;
-    this.rain.classList.toggle('visible', weather === 'rain');
-    this.zoneLabel = ZONE_LABELS[zone];
-    if (money !== undefined) this.updateMoney(money);
-    else {
-      const current = this.moneyEl.querySelector('strong')?.textContent ?? '0';
-      this.moneyEl.innerHTML = `כסף: <strong>${current}</strong> · אזור: ${this.zoneLabel}`;
+    const text = `${dayLabel} · ${time} · ${w}`;
+    if (text !== this.clockText) {
+      this.clockText = text;
+      this.clockEl.textContent = text;
+    }
+    const raining = weather === 'rain';
+    if (raining !== this.rainOn) {
+      this.rainOn = raining;
+      this.rain.classList.toggle('visible', raining);
+    }
+    const zoneLabel = ZONE_LABELS[zone];
+    if (money !== undefined) {
+      this.zoneLabel = zoneLabel;
+      this.writeMoney(money);
+      return;
+    }
+    if (zoneLabel !== this.zoneLabel || this.moneyText === '') {
+      this.zoneLabel = zoneLabel;
+      const current = Number(this.moneyEl.querySelector('strong')?.textContent ?? '0');
+      this.writeMoney(current);
     }
   }
 
   updateMoney(money: number): void {
-    this.moneyEl.innerHTML = `כסף: <strong>${money}</strong> · אזור: ${this.zoneLabel}`;
+    this.writeMoney(money);
+  }
+
+  private writeMoney(money: number): void {
+    const html = `כסף: <strong>${money}</strong> · אזור: ${this.zoneLabel}`;
+    if (html === this.moneyText) return;
+    this.moneyText = html;
+    this.moneyEl.innerHTML = html;
   }
 
   updateNeeds(hunger: number, fatigue: number): void {
@@ -163,11 +187,14 @@ export class UIManager {
   }
 
   showHint(text: string | null): void {
-    if (!text) {
+    const next = text || null;
+    if (next === this.hintShown) return;
+    this.hintShown = next;
+    if (!next) {
       this.hint.classList.remove('visible');
       return;
     }
-    this.hint.textContent = text;
+    this.hint.textContent = next;
     this.hint.classList.add('visible');
   }
 

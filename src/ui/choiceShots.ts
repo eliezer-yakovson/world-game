@@ -423,11 +423,11 @@ class PreviewStudio {
     if (recipe.friend) this.addFriend(recipe.friend, aim);
 
     this.camera.fov = 36;
-    const frame = new THREE.Box3().setFromObject(this.heroRoot, true);
-    frame.expandByObject(this.propRoot);
-    if (recipe.friend) frame.expandByObject(this.friendRoot);
-    const center = frame.getCenter(new THREE.Vector3());
-    const size = frame.getSize(new THREE.Vector3());
+    const frame = posedBounds(this.heroRoot, frameBounds);
+    if (recipe.friend && this.friend) frame.union(posedBounds(this.friendRoot, scratchBounds));
+    frame.union(scratchBounds.setFromObject(this.propRoot));
+    const center = frame.getCenter(scratchCenter);
+    const size = frame.getSize(scratchSize);
     const dist = THREE.MathUtils.clamp(Math.max(size.y, size.x) * 1.55, 3.05, 4.8);
     this.camera.position.set(center.x + dist * 0.34, center.y * 0.92 + 0.35, center.z + dist);
     this.camera.lookAt(center.x, Math.max(0.9, center.y * 0.72), center.z);
@@ -446,10 +446,9 @@ class PreviewStudio {
   }
 
   private plant(root: THREE.Object3D, anchorX: number): void {
-    root.updateMatrixWorld(true);
-    const box = new THREE.Box3().setFromObject(root, true);
+    const box = posedBounds(root, scratchBounds);
     if (box.isEmpty()) return;
-    const center = box.getCenter(new THREE.Vector3());
+    const center = box.getCenter(scratchCenter);
     root.position.x += anchorX - center.x;
     root.position.z -= center.z;
     root.position.y -= box.min.y;
@@ -505,6 +504,38 @@ class PreviewStudio {
   }
 }
 
+const frameBounds = new THREE.Box3();
+const scratchBounds = new THREE.Box3();
+const scratchCenter = new THREE.Vector3();
+const scratchSize = new THREE.Vector3();
+const scratchPoint = new THREE.Vector3();
+const seenBones = new Set<THREE.Bone>();
+
+/** Bounds from the posed bones, not every skinned vertex. */
+function posedBounds(root: THREE.Object3D, target: THREE.Box3): THREE.Box3 {
+  target.makeEmpty();
+  seenBones.clear();
+  root.updateWorldMatrix(true, true);
+  root.traverse((obj) => {
+    const skinned = obj as THREE.SkinnedMesh;
+    if (skinned.isSkinnedMesh) {
+      for (const bone of skinned.skeleton.bones) {
+        if (seenBones.has(bone)) continue;
+        seenBones.add(bone);
+        bone.getWorldPosition(scratchPoint);
+        target.expandByPoint(scratchPoint);
+      }
+      return;
+    }
+    const mesh = obj as THREE.Mesh;
+    if (!mesh.isMesh) return;
+    mesh.getWorldPosition(scratchPoint);
+    target.expandByPoint(scratchPoint);
+  });
+  if (!target.isEmpty()) target.min.y -= 0.06;
+  return target;
+}
+
 function uprightProp(recipe: ShotRecipe): boolean {
   return recipe.prop === 'cloth' || recipe.prop === 'window' || recipe.prop === 'pot' || recipe.prop === 'cake' || recipe.prop === 'steam' || recipe.prop === 'handset' || recipe.prop === 'plate' || recipe.prop === 'apple';
 }
@@ -515,7 +546,7 @@ function placeProp(prop: THREE.Group, recipe: ShotRecipe, hero: THREE.Object3D):
   const head = hero.getObjectByName('Head');
   const mouthPos = mouth ? mouth.getWorldPosition(new THREE.Vector3()) : new THREE.Vector3(0, 1.45, 0.25);
   const headPos = head ? head.getWorldPosition(new THREE.Vector3()) : mouthPos.clone();
-  const box = new THREE.Box3().setFromObject(hero, true);
+  const box = posedBounds(hero, scratchBounds);
   const center = box.getCenter(new THREE.Vector3());
   const face = mouthPos.clone().sub(headPos);
   face.y = 0;

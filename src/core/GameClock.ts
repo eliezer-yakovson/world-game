@@ -54,6 +54,8 @@ export class GameClock {
   update(dt: number): void {
     if (this.paused) return;
     const prevHour = this.hour;
+    const prevLabel = this.timeLabel;
+    const prevDay = this.day;
     this.minutes += (dt * this.speed) / 60;
     while (this.minutes >= 24 * 60) {
       this.minutes -= 24 * 60;
@@ -64,12 +66,14 @@ export class GameClock {
     if (this.hour !== prevHour) {
       bus.emit('hour-changed', { hour: this.hour, day: this.day });
     }
-    bus.emit('clock-tick', {
-      day: this.day,
-      minutes: this.minutes,
-      label: this.timeLabel,
-      weather: this.weather,
-    });
+    if (this.day !== prevDay || this.timeLabel !== prevLabel) {
+      bus.emit('clock-tick', {
+        day: this.day,
+        minutes: this.minutes,
+        label: this.timeLabel,
+        weather: this.weather,
+      });
+    }
   }
 
   setSpeed(multiplier: number): void {

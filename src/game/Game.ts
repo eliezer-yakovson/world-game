@@ -114,6 +114,14 @@ export class Game {
   private pendingGuestId: string | null = null;
   private raycaster = new THREE.Raycaster();
   private pointer = new THREE.Vector2();
+  private readonly titleCam = new THREE.Vector3(8, 12, 18);
+  private readonly skyColor = new THREE.Color();
+  private readonly circlePool: CircleObstacle[] = [];
+  private readonly playerCircles: CircleObstacle[] = [];
+  private readonly npcCircles: CircleObstacle[] = [];
+  private hudStamp = '';
+  private skyHex = -1;
+  private lampsOn: boolean | null = null;
   private homeLayout: Array<{ id: string; x: number; z: number }> = [];
   private canReturnBroken = false;
   private bikeLocked = true;
@@ -372,34 +380,52 @@ export class Game {
     this.ui.updateStrengths(this.memory.strengths);
   }
 
-  private movingObstacles(exceptNpcId?: string): CircleObstacle[] {
-    const circles: CircleObstacle[] = this.traffic.getObstacles();
-    if (exceptNpcId !== 'player') {
-      circles.push({ x: this.player.position.x, z: this.player.position.z, radius: 0.46 });
-    }
+  private fillCircles(target: CircleObstacle[], exceptNpcId?: string): CircleObstacle[] {
+    let n = 0;
+    const take = (x: number, z: number, radius: number) => {
+      let circle = this.circlePool[n];
+      if (!circle) {
+        circle = { x, z, radius };
+        this.circlePool[n] = circle;
+      } else {
+        circle.x = x;
+        circle.z = z;
+        circle.radius = radius;
+      }
+      target[n] = circle;
+      n++;
+    };
+    this.traffic.forEachObstacle(take);
+    if (exceptNpcId !== 'player') take(this.player.position.x, this.player.position.z, 0.46);
     for (const actor of this.npcs.actors) {
       if (actor.id === exceptNpcId) continue;
-      circles.push({ x: actor.mesh.position.x, z: actor.mesh.position.z, radius: 0.5 });
+      take(actor.mesh.position.x, actor.mesh.position.z, 0.5);
     }
-    return circles;
+    target.length = n;
+    return target;
   }
 
   private keepApart(): void {
     const seen = new Set<string>();
     for (const actor of this.npcs.actors) {
       seen.add(actor.id);
+      const desired = actor.mesh.position;
+      let stored = this.npcLastPos.get(actor.id);
       if (actor.anchored) {
-        this.npcLastPos.set(actor.id, actor.mesh.position.clone());
+        if (!stored) {
+          stored = desired.clone();
+          this.npcLastPos.set(actor.id, stored);
+        } else stored.copy(desired);
         continue;
       }
-      const desired = actor.mesh.position.clone();
-      const from = this.npcLastPos.get(actor.id) ?? desired;
-      const resolved = this.colliders.slide(from, desired, 0.5, this.movingObstacles(actor.id));
+      if (stored && Math.abs(stored.x - desired.x) < 0.001 && Math.abs(stored.z - desired.z) < 0.001) continue;
+      const resolved = this.colliders.slide(stored ?? desired, desired, 0.5, this.fillCircles(this.npcCircles, actor.id));
       actor.mesh.position.x = resolved.x;
       actor.mesh.position.z = resolved.z;
       actor.vehicle.position.x = resolved.x;
       actor.vehicle.position.z = resolved.z;
-      this.npcLastPos.set(actor.id, resolved.clone());
+      if (!stored) this.npcLastPos.set(actor.id, resolved.clone());
+      else stored.copy(resolved);
     }
     for (const id of this.npcLastPos.keys()) {
       if (!seen.has(id)) this.npcLastPos.delete(id);
@@ -511,6 +537,7 @@ export class Game {
 
   private collectLamps(): void {
     this.lampMats = [];
+    this.lampsOn = null;
     this.zones.group.traverse((obj) => {
       if (obj.name === 'streetlamp' && (obj as THREE.Mesh).material) {
         this.lampMats.push((obj as THREE.Mesh).material as THREE.MeshStandardMaterial);
@@ -519,8 +546,11 @@ export class Game {
   }
 
   private refreshHud(): void {
-    this.ui.updateClock(this.gameClock.dayLabel, this.gameClock.timeLabel, this.gameClock.weather, this.zones.current);
-    this.updateDayNight();
+    const stamp = `${this.gameClock.day}|${this.gameClock.hour}|${this.gameClock.minuteOfHour}|${this.gameClock.weather}|${this.zones.current}`;
+    const same = stamp === this.hudStamp;
+    this.hudStamp = stamp;
+    if (!same) this.ui.updateClock(this.gameClock.dayLabel, this.gameClock.timeLabel, this.gameClock.weather, this.zones.current);
+    if (!same || this.lampsOn === null) this.updateDayNight();
   }
 
   private updateDayNight(): void {
@@ -534,11 +564,20 @@ export class Game {
     if (!night && season === 2) sky = 0xc9865a;
     if (!night && season === 3) sky = 0xb7c6d6;
     if (!night && season === 1) sky = 0x7ec8e8;
-    this.scene.background = new THREE.Color(sky);
-    (this.scene.fog as THREE.Fog).color.set(sky);
-    for (const mat of this.lampMats) {
-      mat.emissive = new THREE.Color(night ? 0xffcc66 : 0x000000);
-      mat.emissiveIntensity = night ? 1.2 : 0;
+    if (sky !== this.skyHex) {
+      this.skyHex = sky;
+      this.skyColor.setHex(sky);
+      this.scene.background = this.skyColor;
+      (this.scene.fog as THREE.Fog).color.copy(this.skyColor);
+    }
+    if (night !== this.lampsOn) {
+      this.lampsOn = night;
+      const hex = night ? 0xffcc66 : 0x000000;
+      const intensity = night ? 1.2 : 0;
+      for (const mat of this.lampMats) {
+        mat.emissive.setHex(hex);
+        mat.emissiveIntensity = intensity;
+      }
     }
   }
 
@@ -574,9 +613,8 @@ export class Game {
       this.gameClock.update(dt);
       const gameMinutesDelta = dt * (this.gameClock.speed / 60);
       this.needs.update(gameMinutesDelta);
-      this.player.update(dt, this.camera, this.blocked, (next, radius) =>
-        this.colliders.resolve(next, radius, this.movingObstacles('player')),
-      );
+      const circles = this.fillCircles(this.playerCircles, 'player');
+      this.player.update(dt, this.camera, this.blocked, (next, radius) => this.colliders.resolve(next, radius, circles));
       const grew = this.playerTasks.update(dt, this.player);
       if (grew && !this.taskMenu && !this.sceneLock) this.ui.showCaption(grew, 1800);
       this.npcs.update(dt, this.gameClock, this.memory);
@@ -620,7 +658,7 @@ export class Game {
         this.saves.autosave(this.snapshot());
       }
     } else {
-      this.camera.position.lerp(new THREE.Vector3(8, 12, 18), 0.02);
+      this.camera.position.lerp(this.titleCam, 0.02);
       this.camera.lookAt(0, 0, 0);
     }
 

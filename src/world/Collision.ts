@@ -6,13 +6,24 @@ export interface CircleObstacle {
   radius: number;
 }
 
+interface Solid {
+  box: THREE.Box3;
+  stamp: number;
+}
+
+const CELL = 4;
+
 /** Solid boxes for walls and props, plus moving circles for people and cars. */
 export class CollisionWorld {
-  private boxes: THREE.Box3[] = [];
   private readonly size = new THREE.Vector3();
+  private readonly grid = new Map<number, Solid[]>();
+  private readonly nearby: Solid[] = [];
+  private readonly resolved = new THREE.Vector3();
+  private readonly stepped = new THREE.Vector3();
+  private queryStamp = 1;
 
   rebuild(root: THREE.Object3D): void {
-    this.boxes = [];
+    this.grid.clear();
     root.updateWorldMatrix(true, true);
     root.traverse((obj) => {
       const mesh = obj as THREE.Mesh;
@@ -22,32 +33,85 @@ export class CollisionWorld {
       if (box.isEmpty()) return;
       box.getSize(this.size);
       if (this.isGround(this.size)) return;
-      this.boxes.push(box);
+      this.insert({ box, stamp: 0 });
     });
   }
 
+  /**
+   * Pushes `position` out of nearby walls and circles.
+   * The returned vector is reused on the next call, so copy it before resolving again.
+   */
   resolve(position: THREE.Vector3, radius: number, circles: CircleObstacle[]): THREE.Vector3 {
-    const next = position.clone();
-    for (let pass = 0; pass < 2; pass++) {
-      for (const box of this.boxes) this.pushOutOfBox(next, radius, box);
-      for (const circle of circles) this.pushOutOfCircle(next, radius, circle);
-    }
-    return next;
+    this.resolved.copy(position);
+    this.pushAll(this.resolved, radius, circles);
+    return this.resolved;
   }
 
-  /** Short steps so a fast move cannot skip a thin wall. */
+  /** Short steps so a fast move cannot skip a thin wall. Same reuse rule as `resolve`. */
   slide(from: THREE.Vector3, to: THREE.Vector3, radius: number, circles: CircleObstacle[]): THREE.Vector3 {
     const dx = to.x - from.x;
     const dz = to.z - from.z;
     const dist = Math.hypot(dx, dz);
     const steps = Math.max(1, Math.ceil(dist / 0.04));
-    const pos = from.clone();
+    this.stepped.copy(from);
+    const sx = dx / steps;
+    const sz = dz / steps;
     for (let i = 0; i < steps; i++) {
-      pos.x += dx / steps;
-      pos.z += dz / steps;
-      pos.copy(this.resolve(pos, radius, circles));
+      this.stepped.x += sx;
+      this.stepped.z += sz;
+      this.pushAll(this.stepped, radius, circles);
     }
-    return pos;
+    this.resolved.copy(this.stepped);
+    return this.resolved;
+  }
+
+  private insert(solid: Solid): void {
+    const box = solid.box;
+    const minX = Math.floor(box.min.x / CELL);
+    const maxX = Math.floor(box.max.x / CELL);
+    const minZ = Math.floor(box.min.z / CELL);
+    const maxZ = Math.floor(box.max.z / CELL);
+    for (let ix = minX; ix <= maxX; ix++) {
+      for (let iz = minZ; iz <= maxZ; iz++) {
+        const key = cellKey(ix, iz);
+        let bucket = this.grid.get(key);
+        if (!bucket) {
+          bucket = [];
+          this.grid.set(key, bucket);
+        }
+        bucket.push(solid);
+      }
+    }
+  }
+
+  private collect(x: number, z: number, reach: number): Solid[] {
+    this.queryStamp++;
+    const list = this.nearby;
+    list.length = 0;
+    const minX = Math.floor((x - reach) / CELL);
+    const maxX = Math.floor((x + reach) / CELL);
+    const minZ = Math.floor((z - reach) / CELL);
+    const maxZ = Math.floor((z + reach) / CELL);
+    for (let ix = minX; ix <= maxX; ix++) {
+      for (let iz = minZ; iz <= maxZ; iz++) {
+        const bucket = this.grid.get(cellKey(ix, iz));
+        if (!bucket) continue;
+        for (const solid of bucket) {
+          if (solid.stamp === this.queryStamp) continue;
+          solid.stamp = this.queryStamp;
+          list.push(solid);
+        }
+      }
+    }
+    return list;
+  }
+
+  private pushAll(pos: THREE.Vector3, radius: number, circles: CircleObstacle[]): void {
+    const solids = this.collect(pos.x, pos.z, radius + 2);
+    for (let pass = 0; pass < 2; pass++) {
+      for (const solid of solids) this.pushOutOfBox(pos, radius, solid.box);
+      for (const circle of circles) this.pushOutOfCircle(pos, radius, circle);
+    }
   }
 
   private ignored(obj: THREE.Object3D): boolean {
@@ -68,8 +132,8 @@ export class CollisionWorld {
   private pushOutOfBox(pos: THREE.Vector3, radius: number, box: THREE.Box3): void {
     const closestX = THREE.MathUtils.clamp(pos.x, box.min.x, box.max.x);
     const closestZ = THREE.MathUtils.clamp(pos.z, box.min.z, box.max.z);
-    let dx = pos.x - closestX;
-    let dz = pos.z - closestZ;
+    const dx = pos.x - closestX;
+    const dz = pos.z - closestZ;
     const distSq = dx * dx + dz * dz;
     if (distSq >= radius * radius) return;
     if (distSq > 1e-6) {
@@ -105,4 +169,8 @@ export class CollisionWorld {
     pos.x += (dx / dist) * push;
     pos.z += (dz / dist) * push;
   }
+}
+
+function cellKey(ix: number, iz: number): number {
+  return (ix + 1024) * 4096 + (iz + 1024);
 }

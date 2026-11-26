@@ -15,7 +15,8 @@ export type ZoneId =
   | 'school'
   | 'shop'
   | 'park'
-  | 'zoo';
+  | 'zoo'
+  | 'luna';
 
 export type Weather = 'clear' | 'rain' | 'cloudy';
 
@@ -194,6 +195,7 @@ export const ZONE_LABELS: Record<ZoneId, string> = {
   shop: 'המכולת',
   park: 'הפארק',
   zoo: 'גן החיות',
+  luna: 'לונה פארק',
 };
 
 export function emptyStrengths(base = 0): StrengthMap {

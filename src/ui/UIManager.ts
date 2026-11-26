@@ -725,6 +725,7 @@ export class UIManager {
           <button data-z="shop">למכולת</button>
           <button data-z="zoo">לגן החיות</button>
           <button data-z="park">לפארק</button>
+          <button data-z="luna">ללונה פארק</button>
         </div>
         <button class="ghost" id="cancel-car">ביטול</button>
       </div>`;

@@ -3,6 +3,7 @@ import { SCHOOL_SEATS, TEACHERS, schoolSpawns } from '../characters/schoolDay';
 import { box, cyl, mats } from './materials';
 import { encountersIn } from '../scenes/encounters';
 import { buildPlayground, playgroundSpots } from './playground';
+import { buildLunaPark, lunaSpots } from './lunaPark';
 import type { ZoneId } from '../core/types';
 
 export interface Interactable {
@@ -100,6 +101,8 @@ export function buildZone(zone: ZoneId): ZoneBuildResult {
       return buildPark();
     case 'zoo':
       return buildZoo();
+    case 'luna':
+      return buildLuna();
   }
 }
 
@@ -326,6 +329,7 @@ function buildNeighborhood(): ZoneBuildResult {
   makeSign('המכולת', 14, 7.5, 'shop');
   makeSign('הפארק', 20.2, -6.6, 'park');
   makeSign('גן החיות', 18, -18, 'zoo');
+  makeSign('לונה פארק', -20, -16, 'luna');
 
   // Direct door hotspots at house fronts (easier discovery)
   interactables.push({
@@ -1257,6 +1261,57 @@ function zooGear(group: THREE.Group, gear: ZooPen['gear'], x: number, z: number)
   group.add(box(1.15, 0.72, 0.95, mats.wood, x, 0.36, z));
   soft(box(1.3, 0.12, 1.1, mats.roof, x, 0.78, z));
   soft(box(0.42, 0.42, 0.06, zooDen, x, 0.26, z + 0.48));
+}
+
+function buildLuna(): ZoneBuildResult {
+  const group = new THREE.Group();
+  group.name = 'zone-luna';
+  const interactables: Interactable[] = [];
+
+  group.add(box(68, 0.2, 58, mats.grass, 0, -0.1, 2));
+  for (const [x, z] of [
+    [-30, 18],
+    [30, 18],
+    [-30, -18],
+    [30, -18],
+    [0, -20],
+  ]) {
+    group.add(tree(x, z));
+  }
+  group.add(bench(8, 14));
+  group.add(bench(-8, 14, Math.PI));
+
+  buildLunaPark(group);
+  for (const spot of lunaSpots()) {
+    interactables.push({
+      id: `ride-${spot.id}-${spot.slot}`,
+      label: spot.label,
+      position: new THREE.Vector3(spot.x, 0, spot.z),
+      radius: 1.65,
+      type: 'activity',
+      data: { action: 'ride', ride: spot.id, slot: spot.slot },
+    });
+  }
+  interactables.push({
+    id: 'exit-luna',
+    label: 'לחזור לשכונה',
+    position: new THREE.Vector3(0, 0, 23.2),
+    radius: 2.4,
+    type: 'door',
+    data: { target: 'neighborhood' },
+  });
+  addEncounters('luna', group, interactables);
+
+  return {
+    group,
+    interactables,
+    spawn: new THREE.Vector3(0, 0, 20),
+    npcSpawns: [
+      { id: 'dani', position: new THREE.Vector3(-2, 0, 15) },
+      { id: 'noam', position: new THREE.Vector3(2, 0, 14) },
+      { id: 'maya', position: new THREE.Vector3(-6, 0, 12) },
+    ],
+  };
 }
 
 function buildZoo(): ZoneBuildResult {

@@ -3,7 +3,24 @@ import type { GameClock } from '../core/GameClock';
 import type { MemoryStore } from '../core/MemoryStore';
 import type { NpcManager } from './NpcManager';
 import { STRENGTH_LABELS, ZONE_LABELS, emptyStrengths, type StrengthId, type StrengthMap, type ZoneId } from '../core/types';
-import { allRides, approachOf, rideById, sampleRide } from '../world/playground';
+import { allRides, approachOf, rideById, sampleRide, type RidePose } from '../world/playground';
+import { allLunaRides, approachLuna, lunaRideById, sampleLuna } from '../world/lunaPark';
+
+function anyRide(id: string) {
+  return rideById(id) ?? lunaRideById(id);
+}
+
+function anySample(id: string, slot: number, t: number): RidePose {
+  return rideById(id) ? sampleRide(id, slot, t) : sampleLuna(id, slot, t);
+}
+
+function anyApproach(id: string, slot: number): { x: number; z: number } {
+  return rideById(id) ? approachOf(id, slot) : approachLuna(id, slot);
+}
+
+function ridesHere(zone: ZoneId) {
+  return zone === 'luna' ? allLunaRides() : allRides();
+}
 
 /**
  * Each person gets a route when their story starts, then walks it.
@@ -417,6 +434,10 @@ const PLACES: Place[] = [
   { id: 'yellow-living', zone: 'home_yellow', name: 'הסלון הצהוב', x: 6, z: 6.4, yaw: 0.2, kind: 'home' },
   { id: 'yellow-kids', zone: 'home_yellow', name: 'החדר של מאיה', x: 8.2, z: -4.2, yaw: Math.PI, kind: 'home' },
   { id: 'yellow-window', zone: 'home_yellow', name: 'החלון לגינה', x: 8.2, z: 8.4, yaw: 0, kind: 'home' },
+  { id: 'luna-gate', zone: 'luna', name: 'הכניסה ללונה פארק', x: 0, z: 16.2, yaw: Math.PI, kind: 'street' },
+  { id: 'luna-mid', zone: 'luna', name: 'השביל המרכזי', x: 0, z: 8, yaw: Math.PI, kind: 'play' },
+  { id: 'luna-west', zone: 'luna', name: 'ליד הגלגל', x: -8, z: 2, yaw: 0.4, kind: 'play' },
+  { id: 'luna-east', zone: 'luna', name: 'ליד המגדל', x: 8, z: 2, yaw: -0.4, kind: 'play' },
 ];
 
 const EXIT: Record<ZoneId, { x: number; z: number }> = {
@@ -428,22 +449,23 @@ const EXIT: Record<ZoneId, { x: number; z: number }> = {
   shop: { x: 0, z: 6 },
   park: { x: 0, z: 13 },
   zoo: { x: 0, z: 22 },
+  luna: { x: 0, z: 22 },
 };
 
 const placeById = new Map(PLACES.map((place) => [place.id, place]));
 
 function allowedZones(id: string): ZoneId[] {
   if (id === 'mom' || id === 'dad') return ['home', 'neighborhood'];
-  if (id === 'brother') return ['home', 'park', 'neighborhood'];
-  if (id === 'sister') return ['home', 'school', 'park', 'shop', 'neighborhood'];
+  if (id === 'brother') return ['home', 'park', 'neighborhood', 'luna'];
+  if (id === 'sister') return ['home', 'school', 'park', 'shop', 'neighborhood', 'luna'];
   if (id === 'teacher' || id === 'teacher_david') return ['school', 'neighborhood'];
   if (id === 'shopkeeper') return ['shop', 'neighborhood'];
   if (id === 'zookeeper') return ['zoo', 'neighborhood'];
   if (id === 'neighbor') return ['neighborhood', 'home_yellow', 'park'];
-  if (id === 'noam') return ['school', 'park', 'neighborhood', 'shop', 'zoo', 'home_blue'];
-  if (id === 'maya') return ['school', 'park', 'neighborhood', 'shop', 'zoo', 'home_yellow'];
-  if (STUDENTS.has(id)) return ['school', 'park', 'neighborhood', 'shop', 'zoo'];
-  return ['neighborhood', 'park'];
+  if (id === 'noam') return ['school', 'park', 'neighborhood', 'shop', 'zoo', 'home_blue', 'luna'];
+  if (id === 'maya') return ['school', 'park', 'neighborhood', 'shop', 'zoo', 'home_yellow', 'luna'];
+  if (STUDENTS.has(id)) return ['school', 'park', 'neighborhood', 'shop', 'zoo', 'luna'];
+  return ['neighborhood', 'park', 'luna'];
 }
 
 function zoneWeight(id: string, zone: ZoneId, hour: number): number {
@@ -452,12 +474,12 @@ function zoneWeight(id: string, zone: ZoneId, hour: number): number {
     if (zone === 'school') return school ? 6 : 1;
   }
   if (id === 'mom' || id === 'dad') return zone === 'home' ? 7 : 1;
-  if (id === 'brother') return zone === 'home' ? 4 : zone === 'park' ? 3 : 2;
+  if (id === 'brother') return zone === 'home' ? 4 : zone === 'park' || zone === 'luna' ? 3 : 2;
   if (id === 'shopkeeper') return zone === 'shop' ? 8 : 1;
   if (id === 'zookeeper') return zone === 'zoo' ? 8 : 1;
   if (id === 'neighbor') return zone === 'neighborhood' ? 5 : 2;
   if (KIDS.has(id)) {
-    if (zone === 'park' || zone === 'neighborhood') return school ? 1 : 3;
+    if (zone === 'park' || zone === 'neighborhood' || zone === 'luna') return school ? 1 : 3;
     if (zone === 'home' || zone === 'home_blue' || zone === 'home_yellow') return school ? 1 : 3;
     return 1;
   }
@@ -552,7 +574,7 @@ export class NpcLifeDirector {
   }
 
   freeSlot(id: string): number {
-    const ride = rideById(id);
+    const ride = anyRide(id);
     if (!ride) return 0;
     for (let slot = 0; slot < ride.slots; slot++) {
       if (!this.slotTaken(id, slot)) return slot;
@@ -599,12 +621,12 @@ export class NpcLifeDirector {
     if (!life) return null;
     const place = placeById.get(life.placeId);
     const event = this.currentEvent(life);
-    const ride = life.rideId ? rideById(life.rideId) : undefined;
+    const ride = life.rideId ? anyRide(life.rideId) : undefined;
     const doing =
       life.phase === 'ride'
         ? life.rideLine || `על ${ride?.name ?? 'מתקן'}`
         : life.headingToRide && life.phase === 'walk'
-          ? `הולך אל ${ride?.name ?? 'מתקן בפארק'}`
+          ? `הולך אל ${ride?.name ?? 'מתקן'}`
           : life.phase === 'walk'
             ? `הולך ברגל אל ${place?.name ?? 'המקום הבא'}`
             : life.phase === 'leave'
@@ -798,7 +820,7 @@ export class NpcLifeDirector {
       this.npcs.moveBusy(life.id, life.x, life.z, life.yaw);
       this.npcs.playClip(life.id, 'walk', true);
       const place = placeById.get(life.placeId);
-      const ride = life.headingToRide && life.rideId ? rideById(life.rideId) : undefined;
+      const ride = life.headingToRide && life.rideId ? anyRide(life.rideId) : undefined;
       const status = ride
         ? `הולך אל ${ride.name}`
         : life.phase === 'leave'
@@ -920,7 +942,7 @@ export class NpcLifeDirector {
   }
 
   private beginAct(life: Life): void {
-    if (life.zone === 'park') {
+    if (life.zone === 'park' || life.zone === 'luna') {
       this.beginPark(life);
       return;
     }
@@ -953,7 +975,7 @@ export class NpcLifeDirector {
 
   private beginPark(life: Life): void {
     if (life.headingToRide && life.rideId) {
-      const spot = approachOf(life.rideId, life.rideSlot);
+      const spot = anyApproach(life.rideId, life.rideSlot);
       const far = Math.hypot(life.x - spot.x, life.z - spot.z);
       if (far > 1.8 && life.rideTries < 2) {
         life.rideTries += 1;
@@ -980,7 +1002,7 @@ export class NpcLifeDirector {
     life.rideTries = 0;
     life.eventId = null;
     life.rideLine = '';
-    const spot = approachOf(pick.id, pick.slot);
+    const spot = anyApproach(pick.id, pick.slot);
     life.phase = 'walk';
     life.goalX = spot.x;
     life.goalZ = spot.z;
@@ -993,12 +1015,12 @@ export class NpcLifeDirector {
 
   private pickRide(self: Life): { id: string; slot: number } {
     const open: Array<{ id: string; slot: number }> = [];
-    for (const ride of allRides()) {
+    for (const ride of ridesHere(self.zone)) {
       for (let slot = 0; slot < ride.slots; slot++) {
         let taken = this.playerClaim?.id === ride.id && this.playerClaim.slot === slot;
         if (!taken) {
           for (const other of this.people.values()) {
-            if (other.id === self.id || other.zone !== 'park' || other.rideId !== ride.id || other.rideSlot !== slot) continue;
+            if (other.id === self.id || other.zone !== self.zone || other.rideId !== ride.id || other.rideSlot !== slot) continue;
             if (other.phase === 'ride' || other.headingToRide) {
               taken = true;
               break;
@@ -1008,18 +1030,18 @@ export class NpcLifeDirector {
         if (!taken) open.push({ id: ride.id, slot });
       }
     }
-    const pool = open.length ? open : allRides().map((ride) => ({ id: ride.id, slot: 0 }));
+    const pool = open.length ? open : ridesHere(self.zone).map((ride) => ({ id: ride.id, slot: 0 }));
     return pool[Math.floor(Math.random() * pool.length)];
   }
 
   private stepRide(life: Life, dt: number, clock: GameClock, visible: boolean): string | null {
-    const ride = rideById(life.rideId ?? '');
+    const ride = anyRide(life.rideId ?? '');
     if (!ride) {
       life.phase = 'walk';
       return null;
     }
     life.seconds += dt;
-    const pose = sampleRide(ride.id, life.rideSlot, life.seconds);
+    const pose = anySample(ride.id, life.rideSlot, life.seconds);
     life.rideLine = pose.line;
     life.x = pose.x;
     life.z = pose.z;
@@ -1039,7 +1061,7 @@ export class NpcLifeDirector {
     life.achievements.unshift({ title: ride.name, detail, timeLabel: clock.timeLabel });
     if (life.achievements.length > 24) life.achievements.pop();
     this.memory.addDiary(life.id, clock.timeLabel, `${ride.name}: ${detail}`);
-    const spot = approachOf(ride.id, life.rideSlot);
+    const spot = anyApproach(ride.id, life.rideSlot);
     life.x = spot.x;
     life.z = spot.z;
     if (this.npcs.actors.some((actor) => actor.id === life.id)) {

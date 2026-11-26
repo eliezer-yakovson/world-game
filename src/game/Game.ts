@@ -40,6 +40,7 @@ import { setPreviewCharacter } from '../ui/choiceShots';
 import { STRENGTH_LABELS } from '../core/types';
 import { preloadCharacters } from '../world/AssetLoader';
 import { animateRides, rideById, sampleRide, setRideNow } from '../world/playground';
+import { animateLuna, lunaRideById, sampleLuna, setLunaNow } from '../world/lunaPark';
 import { dressZone, preloadProps } from '../world/PropLibrary';
 import { CollisionWorld, type CircleObstacle } from '../world/Collision';
 import { SchoolDayDirector } from '../characters/schoolDay';
@@ -54,7 +55,16 @@ const ALL_ZONES: ZoneId[] = [
   'shop',
   'park',
   'zoo',
+  'luna',
 ];
+
+function knownRide(id: string) {
+  return rideById(id) ?? lunaRideById(id);
+}
+
+function knownSample(id: string, slot: number, t: number) {
+  return rideById(id) ? sampleRide(id, slot, t) : sampleLuna(id, slot, t);
+}
 
 export class Game {
   private renderer: THREE.WebGLRenderer;
@@ -516,8 +526,8 @@ export class Game {
     if (zone === 'home' || zone === 'home_blue' || zone === 'home_yellow') this.homeTasks.begin();
     const homeZone = zone === 'home' || zone === 'home_blue' || zone === 'home_yellow';
     const indoor = homeZone || zone === 'shop';
-    this.player.cameraDistance = homeZone ? 7 : indoor ? 6.2 : zone === 'school' ? 8 : 9;
-    this.player.cameraHeight = homeZone ? 4.3 : indoor ? 3.6 : zone === 'school' ? 4.6 : 5.5;
+    this.player.cameraDistance = zone === 'luna' ? 12 : homeZone ? 7 : indoor ? 6.2 : zone === 'school' ? 8 : 9;
+    this.player.cameraHeight = zone === 'luna' ? 6.6 : homeZone ? 4.3 : indoor ? 3.6 : zone === 'school' ? 4.6 : 5.5;
     this.colliders.rebuild(this.zones.group);
     this.audio.setZone(zone);
     this.collectLamps();
@@ -701,6 +711,7 @@ export class Game {
       const worldPaused = this.performances.active || this.sceneLock || this.npcs.isHeld;
       if (!worldPaused) this.parkClock += dt;
       setRideNow(this.parkClock);
+      setLunaNow(this.parkClock);
       this.advancePlayerRide(dt, worldPaused);
       const circles = this.fillCircles(this.playerCircles, 'player');
       this.player.update(dt, this.camera, this.blocked, (next, radius) => this.colliders.resolve(next, radius, circles));
@@ -713,6 +724,7 @@ export class Game {
       const beat = this.life.update(dt, this.zones.current, this.gameClock, this.player.position.x, this.player.position.z);
       if (beat && !this.sceneLock) this.ui.showCaption(beat, 2600);
       if (this.zones.current === 'park') animateRides(this.zones.group);
+      if (this.zones.current === 'luna') animateLuna(this.zones.group);
       this.traffic.update(dt);
       if (this.zones.current === 'zoo') this.zooLife.update(dt);
       if (this.zones.current === 'home') this.homeLife.maybePlayMess(0.0008 * this.timeAccel);
@@ -908,7 +920,7 @@ export class Game {
   }
 
   private beginRide(id: string, slot: number): void {
-    const ride = rideById(id);
+    const ride = knownRide(id);
     if (!ride) return;
     if (this.player.posing) this.endSeat(false);
     this.playerTasks.yield(this.player);
@@ -917,25 +929,25 @@ export class Game {
     const chosen = this.life.slotTaken(id, preferred) ? this.life.freeSlot(id) : preferred;
     this.life.claimRide(id, chosen);
     this.playerRide = { id, slot: chosen, t: 0 };
-    this.player.setPin(sampleRide(id, chosen, 0));
+    this.player.setPin(knownSample(id, chosen, 0));
     this.ui.showCaption(`${ride.blurb}. E כדי לרדת`);
   }
 
   private advancePlayerRide(dt: number, paused: boolean): void {
     if (!this.playerRide) return;
     if (!paused && !this.blocked) this.playerRide.t += dt;
-    const ride = rideById(this.playerRide.id);
+    const ride = knownRide(this.playerRide.id);
     if (!ride || this.playerRide.t >= ride.duration) {
       this.finishPlayerRide(Boolean(ride));
       return;
     }
-    this.player.setPin(sampleRide(this.playerRide.id, this.playerRide.slot, this.playerRide.t));
+    this.player.setPin(knownSample(this.playerRide.id, this.playerRide.slot, this.playerRide.t));
   }
 
   private finishPlayerRide(completed: boolean, quiet = false): void {
     const current = this.playerRide;
     if (!current) return;
-    const ride = rideById(current.id);
+    const ride = knownRide(current.id);
     this.playerRide = null;
     this.player.clearPin();
     this.life.releaseClaim();

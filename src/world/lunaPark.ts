@@ -45,6 +45,72 @@ const BUMP = [
   { x: 16.4, z: -10, rx: 2.45, rz: 1.7, speed: -1.02, phase: 1.1 },
 ];
 
+/** Seats share one ride. Approaches are the boarding marks on the path. */
+const WHEEL_APPROACH = [-19.05, -18, -16.95, -15.9].map((x) => ({ x, z: WHEEL.z + 4.2 }));
+const DROP_APPROACH = [16.75, 17.8, 18.85, 19.9].map((x) => ({ x, z: DROP.z + 3.4 }));
+const SHIP_X = [-1.08, -0.36, 0.36, 1.08];
+const SHIP_APPROACH = SHIP_X.map((x) => ({ x, z: 5.35 }));
+const CHAIN_APPROACH = [-17.55, -16.5, -15.45, -14.4].map((x) => ({ x, z: CHAIN.z + 4.4 }));
+const BUMP_APPROACH = [
+  { x: 11.15, z: -5.45 },
+  { x: 12.35, z: -5.45 },
+  { x: 15.15, z: -5.45 },
+  { x: 16.35, z: -5.45 },
+];
+const DROP_SEAT = [
+  { x: 0.42, z: 0.62 },
+  { x: -0.42, z: 0.62 },
+  { x: 0.78, z: -0.28 },
+  { x: -0.78, z: -0.28 },
+];
+
+/** Queue mark 0 is closest to the ride. The line steps away along the path. */
+const LINES: Record<string, { x: number; z: number; yaw: number; dx: number; dz: number; count: number; along: 'x' | 'z' }> = {
+  'luna-wheel': { x: -14.35, z: 13.15, yaw: -Math.PI / 2, dx: 0.96, dz: 0, count: 4, along: 'x' },
+  'luna-drop': { x: 15.15, z: 13.15, yaw: Math.PI / 2, dx: -0.96, dz: 0, count: 4, along: 'x' },
+  'luna-ship': { x: 1.15, z: 8.15, yaw: Math.PI, dx: 0, dz: 0.96, count: 4, along: 'z' },
+  'luna-chain': { x: -13.3, z: -5.35, yaw: Math.PI, dx: 0.96, dz: 0, count: 4, along: 'x' },
+  'luna-bump': { x: 9.4, z: -5.35, yaw: Math.PI, dx: -0.96, dz: 0, count: 4, along: 'x' },
+};
+
+const PATH_NODES: Array<{ id: string; x: number; z: number }> = [
+  { id: 'door', x: 0, z: 21.2 },
+  { id: 'gate', x: 0, z: 16.5 },
+  { id: 'cross', x: 0, z: 12.2 },
+  { id: 'wheel', x: -16.5, z: 12.2 },
+  { id: 'drop', x: 18.2, z: 12.2 },
+  { id: 'west', x: -10.5, z: 12.2 },
+  { id: 'east', x: 10.5, z: 12.2 },
+  { id: 'ship', x: 0, z: 7.2 },
+  { id: 'westMid', x: -10.5, z: 2 },
+  { id: 'eastMid', x: 10.5, z: 2 },
+  { id: 'westLow', x: -10.5, z: -4.6 },
+  { id: 'eastLow', x: 10.5, z: -4.6 },
+  { id: 'low', x: 0, z: -4.6 },
+  { id: 'chain', x: -16, z: -4.6 },
+  { id: 'bump', x: 13.8, z: -4.6 },
+  { id: 'south', x: 0, z: -12 },
+];
+
+const PATH_LINKS: Array<[string, string]> = [
+  ['door', 'gate'],
+  ['gate', 'cross'],
+  ['cross', 'west'],
+  ['west', 'wheel'],
+  ['cross', 'east'],
+  ['east', 'drop'],
+  ['cross', 'ship'],
+  ['west', 'westMid'],
+  ['westMid', 'westLow'],
+  ['east', 'eastMid'],
+  ['eastMid', 'eastLow'],
+  ['westLow', 'chain'],
+  ['westLow', 'low'],
+  ['low', 'eastLow'],
+  ['eastLow', 'bump'],
+  ['low', 'south'],
+];
+
 let rideNow = 0;
 
 export function setLunaNow(time: number): void {
@@ -129,10 +195,11 @@ function gondola(slot: number): { x: number; y: number; z: number } {
 }
 
 function wheelPose(slot: number): RidePose {
-  const at = gondola(slot);
-  const height = Math.sin(rideNow * 0.58 + slot * Math.PI);
+  const car = slot < 2 ? 0 : 1;
+  const at = gondola(car);
+  const height = Math.sin(rideNow * 0.58 + car * Math.PI);
   return {
-    x: at.x,
+    x: at.x + (slot % 2 === 0 ? -0.36 : 0.36),
     y: at.y + 0.08,
     z: at.z,
     yaw: 0,
@@ -140,7 +207,7 @@ function wheelPose(slot: number): RidePose {
     roll: 0,
     emote: 'sit',
     loop: false,
-    line: height > 0.35 ? 'למעלה בגלגל' : height < -0.35 ? 'למטה בגלגל' : 'הגלגל מסתובב',
+    line: height > 0.35 ? 'למעלה בגלגל, יחד' : height < -0.35 ? 'למטה בגלגל, יחד' : 'יושבים יחד והגלגל מסתובב',
   };
 }
 
@@ -162,12 +229,13 @@ function dropPhase(): { y: number; line: string; emote: string; pitch: number; l
   return { y: low, line: 'על המגדל', emote: 'idle', pitch: 0, loop: true };
 }
 
-function dropPose(): RidePose {
+function dropPose(slot: number): RidePose {
   const phase = dropPhase();
+  const seat = DROP_SEAT[slot] ?? DROP_SEAT[0];
   return {
-    x: DROP.x,
+    x: DROP.x + seat.x,
     y: phase.y + 0.08,
-    z: DROP.z + 0.42,
+    z: DROP.z + seat.z,
     yaw: 0,
     pitch: phase.pitch,
     roll: 0,
@@ -183,7 +251,7 @@ function shipAngle(): number {
 
 function shipSeat(slot: number): { x: number; y: number; z: number; roll: number } {
   const angle = shipAngle();
-  const localX = slot === 0 ? -0.55 : 0.55;
+  const localX = SHIP_X[slot] ?? 0;
   const at = aroundZ(SHIP.x, SHIP.y, SHIP.z, localX, SHIP.deck + 0.22, 0, angle);
   return { ...at, roll: angle };
 }
@@ -225,7 +293,7 @@ function chainSeat(index: number): { x: number; y: number; z: number; yaw: numbe
 }
 
 function chainPose(slot: number): RidePose {
-  const at = chainSeat(slot === 0 ? 0 : 2);
+  const at = chainSeat(slot);
   const opening = Math.sin(rideNow * 0.4) > 0;
   return {
     x: at.x,
@@ -271,17 +339,21 @@ function bumperWorld(slot: number): { x: number; z: number; yaw: number; roll: n
 }
 
 function bumperPose(slot: number): RidePose {
-  const at = bumperWorld(slot);
+  const at = bumperWorld(slot < 2 ? 0 : 1);
+  const lx = slot % 2 === 0 ? -0.28 : 0.28;
+  const lz = 0.02;
+  const c = Math.cos(at.yaw);
+  const s = Math.sin(at.yaw);
   return {
-    x: at.x,
+    x: at.x + lx * c + lz * s,
     y: 0.78,
-    z: at.z,
+    z: at.z - lx * s + lz * c,
     yaw: at.yaw,
     pitch: at.bump * 0.2,
     roll: at.roll,
     emote: 'sit',
     loop: false,
-    line: at.bump > 0.2 ? 'המכונית מתנגשת' : 'נוהג במעגל',
+    line: at.bump > 0.2 ? 'מתנגשים יחד' : 'נוהגים יחד במעגל',
   };
 }
 
@@ -291,11 +363,11 @@ const rides: Ride[] = [
     name: 'גלגל ענק',
     blurb: 'יושבים בקרון והגלגל מסתובב',
     duration: 11,
-    slots: 2,
+    slots: 4,
     awards: { friendship: 1 },
-    slotLabel: (slot) => (slot === 0 ? 'לשבת בקרון הראשון' : 'לשבת בקרון שממול'),
-    approach: (slot) => ({ x: WHEEL.x + (slot === 0 ? -0.7 : 0.7), z: WHEEL.z + 4.1 }),
-    sample: (slot, t) => cycle(t, 11, { x: WHEEL.x + (slot === 0 ? -0.7 : 0.7), z: WHEEL.z + 4.1 }, () => wheelPose(slot), 'עולה לקרון'),
+    slotLabel: (slot) => (slot < 2 ? (slot === 0 ? 'לשבת בקרון, משמאל' : 'לשבת בקרון, לידו') : slot === 2 ? 'לשבת בקרון שממול' : 'לשבת לידו בקרון שממול'),
+    approach: (slot) => WHEEL_APPROACH[Math.min(slot, WHEEL_APPROACH.length - 1)],
+    sample: (slot, t) => cycle(t, 11, WHEEL_APPROACH[Math.min(slot, WHEEL_APPROACH.length - 1)], () => wheelPose(slot), 'עולה לקרון'),
     spin: (root) => {
       const wheel = root.getObjectByName('rig-ferris');
       if (wheel) wheel.rotation.z = rideNow * 0.58;
@@ -311,11 +383,11 @@ const rides: Ride[] = [
     name: 'מגדל הנפילה',
     blurb: 'עולים למעלה, עוצרים, ונופלים',
     duration: 9,
-    slots: 1,
+    slots: 4,
     awards: { courage: 2 },
-    slotLabel: () => 'לעלות למגדל הנפילה',
-    approach: () => ({ x: DROP.x, z: DROP.z + 4.3 }),
-    sample: (_slot, t) => cycle(t, 9, { x: DROP.x, z: DROP.z + 4.3 }, dropPose, 'עולה על המגדל'),
+    slotLabel: (slot) => ['לעמוד במגדל, מימין', 'לעמוד במגדל, משמאל', 'לעמוד במגדל, מאחור מימין', 'לעמוד במגדל, מאחור משמאל'][slot] ?? 'לעמוד במגדל עם כולם',
+    approach: (slot) => DROP_APPROACH[Math.min(slot, DROP_APPROACH.length - 1)],
+    sample: (slot, t) => cycle(t, 9, DROP_APPROACH[Math.min(slot, DROP_APPROACH.length - 1)], () => dropPose(slot), 'עולה על המגדל'),
     spin: (root) => {
       const car = root.getObjectByName('rig-drop');
       if (car) car.position.y = dropPhase().y;
@@ -326,11 +398,11 @@ const rides: Ride[] = [
     name: 'ספינת פיראטים',
     blurb: 'יושבים והספינה מתנדנדת גבוה',
     duration: 9,
-    slots: 2,
+    slots: 4,
     awards: { courage: 1, friendship: 1 },
-    slotLabel: (slot) => (slot === 0 ? 'לשבת בצד שמאל' : 'לשבת בצד ימין'),
-    approach: (slot) => ({ x: slot === 0 ? -0.7 : 0.7, z: 6.6 }),
-    sample: (slot, t) => cycle(t, 9, { x: slot === 0 ? -0.7 : 0.7, z: 6.6 }, () => shipPose(slot), 'עולה לספינה'),
+    slotLabel: (slot) => ['לשבת בספינה, בקצה השמאלי', 'לשבת בספינה, משמאל', 'לשבת בספינה, מימין', 'לשבת בספינה, בקצה הימני'][slot] ?? 'לשבת בספינה',
+    approach: (slot) => SHIP_APPROACH[Math.min(slot, SHIP_APPROACH.length - 1)],
+    sample: (slot, t) => cycle(t, 9, SHIP_APPROACH[Math.min(slot, SHIP_APPROACH.length - 1)], () => shipPose(slot), 'עולה לספינה'),
     spin: (root) => {
       const ship = root.getObjectByName('rig-ship');
       if (ship) ship.rotation.z = shipAngle();
@@ -341,12 +413,11 @@ const rides: Ride[] = [
     name: 'שרשראות',
     blurb: 'יושבים, מסתובבים, והכיסא עף החוצה',
     duration: 8,
-    slots: 2,
+    slots: 4,
     awards: { courage: 1, flexibility: 1 },
-    slotLabel: (slot) => (slot === 0 ? 'לשבת על שרשרת' : 'לשבת על השרשרת ממול'),
-    approach: (slot) => ({ x: CHAIN.x + (slot === 0 ? -1.1 : 1.1), z: CHAIN.z + 5.2 }),
-    sample: (slot, t) =>
-      cycle(t, 8, { x: CHAIN.x + (slot === 0 ? -1.1 : 1.1), z: CHAIN.z + 5.2 }, () => chainPose(slot), 'עולה על השרשרת'),
+    slotLabel: (slot) => `לשבת על שרשרת ${slot + 1}`,
+    approach: (slot) => CHAIN_APPROACH[Math.min(slot, CHAIN_APPROACH.length - 1)],
+    sample: (slot, t) => cycle(t, 8, CHAIN_APPROACH[Math.min(slot, CHAIN_APPROACH.length - 1)], () => chainPose(slot), 'עולה על השרשרת'),
     spin: (root) => {
       const hub = root.getObjectByName('rig-chain-hub');
       if (hub) hub.rotation.y = chainMotion().spin;
@@ -380,11 +451,11 @@ const rides: Ride[] = [
     name: 'מכוניות מתנגשות',
     blurb: 'נוהגים במעגל ומתנגשים',
     duration: 8,
-    slots: 2,
+    slots: 4,
     awards: { flexibility: 1 },
-    slotLabel: (slot) => (slot === 0 ? 'לנהוג במכונית האדומה' : 'לנהוג במכונית הכחולה'),
-    approach: (slot) => ({ x: slot === 0 ? 12.2 : 15.4, z: -5.4 }),
-    sample: (slot, t) => cycle(t, 8, { x: slot === 0 ? 12.2 : 15.4, z: -5.4 }, () => bumperPose(slot), 'נכנס למכונית'),
+    slotLabel: (slot) => ['לנהוג באדומה', 'לשבת ליד הנהג באדומה', 'לנהוג בכחולה', 'לשבת ליד הנהג בכחולה'][slot] ?? 'לעלות למכונית',
+    approach: (slot) => BUMP_APPROACH[Math.min(slot, BUMP_APPROACH.length - 1)],
+    sample: (slot, t) => cycle(t, 8, BUMP_APPROACH[Math.min(slot, BUMP_APPROACH.length - 1)], () => bumperPose(slot), 'נכנס למכונית'),
     spin: (root) => {
       for (let slot = 0; slot < 2; slot++) {
         const car = root.getObjectByName(`rig-bump-${slot}`);
@@ -441,6 +512,78 @@ export function lunaSpots(): Array<{ id: string; slot: number; label: string; x:
     }
   }
   return spots;
+}
+
+export function lunaLine(id: string): Array<{ x: number; z: number; yaw: number }> {
+  const spec = LINES[id];
+  if (!spec) return [];
+  const spots: Array<{ x: number; z: number; yaw: number }> = [];
+  for (let i = 0; i < spec.count; i++) spots.push({ x: spec.x + spec.dx * i, z: spec.z + spec.dz * i, yaw: spec.yaw });
+  return spots;
+}
+
+export function lunaQueues(): Array<{ id: string; label: string; x: number; z: number }> {
+  return rides
+    .filter((ride) => LINES[ride.id])
+    .map((ride) => {
+      const spots = lunaLine(ride.id);
+      const tail = spots[spots.length - 1];
+      return { id: ride.id, label: `לעמוד בתור ל${ride.name}`, x: tail.x, z: tail.z };
+    });
+}
+
+/** Waypoints along the paved paths, from a person to a goal. The goal itself is not included. */
+export function lunaRoute(x: number, z: number, gx: number, gz: number): Array<{ x: number; z: number }> {
+  const nearest = (px: number, pz: number) => {
+    let best = PATH_NODES[0];
+    let bestD = Infinity;
+    for (const node of PATH_NODES) {
+      const d = Math.hypot(node.x - px, node.z - pz);
+      if (d < bestD) {
+        best = node;
+        bestD = d;
+      }
+    }
+    return best;
+  };
+  const start = nearest(x, z);
+  const end = nearest(gx, gz);
+  const adj = new Map<string, string[]>();
+  for (const node of PATH_NODES) adj.set(node.id, []);
+  for (const [a, b] of PATH_LINKS) {
+    adj.get(a)?.push(b);
+    adj.get(b)?.push(a);
+  }
+  const prev = new Map<string, string | null>();
+  const pending = [start.id];
+  prev.set(start.id, null);
+  while (pending.length) {
+    const id = pending.shift();
+    if (!id || id === end.id) break;
+    for (const next of adj.get(id) ?? []) {
+      if (prev.has(next)) continue;
+      prev.set(next, id);
+      pending.push(next);
+    }
+  }
+  if (!prev.has(end.id)) return [];
+  const chain: string[] = [];
+  let cursor: string | null = end.id;
+  while (cursor) {
+    chain.push(cursor);
+    cursor = prev.get(cursor) ?? null;
+  }
+  chain.reverse();
+  const byId = new Map(PATH_NODES.map((node) => [node.id, node]));
+  const points: Array<{ x: number; z: number }> = [];
+  for (const id of chain) {
+    const node = byId.get(id);
+    if (!node || Math.hypot(node.x - x, node.z - z) < 1.15) continue;
+    points.push({ x: node.x, z: node.z });
+  }
+  const last = points[points.length - 1];
+  if (last && Math.hypot(last.x - gx, last.z - gz) < 1.25) points.pop();
+  return points;
 }
 
 export function animateLuna(root: THREE.Object3D): void {
@@ -504,25 +647,26 @@ function buildWheel(parent: THREE.Group): void {
   for (let slot = 0; slot < 2; slot++) {
     const car = rig(`rig-gondola-${slot}`, WHEEL.x, WHEEL.y - WHEEL.radius, WHEEL.z);
     const color = slot === 0 ? paint.blue : paint.orange;
-    car.add(box(1.25, 0.08, 0.95, color, 0, 0, 0));
-    car.add(box(1.25, 1.25, 0.06, color, 0, 0.66, -0.44));
-    car.add(box(0.06, 1.25, 0.95, color, -0.58, 0.66, 0));
-    car.add(box(0.06, 1.25, 0.95, color, 0.58, 0.66, 0));
-    car.add(box(1.3, 0.08, 1.02, paint.white, 0, 1.32, 0));
+    car.add(box(1.8, 0.08, 0.95, color, 0, 0, 0));
+    car.add(box(1.8, 1.25, 0.06, color, 0, 0.66, -0.44));
+    car.add(box(0.06, 1.25, 0.95, color, -0.87, 0.66, 0));
+    car.add(box(0.06, 1.25, 0.95, color, 0.87, 0.66, 0));
+    car.add(box(1.85, 0.08, 1.02, paint.white, 0, 1.32, 0));
     parent.add(car);
   }
   parent.add(fairLabel('גלגל ענק', WHEEL.x, WHEEL.y + WHEEL.radius + 0.85, WHEEL.z, 2.8));
 }
 
 function buildDrop(parent: THREE.Group): void {
-  parent.add(box(4.2, 0.06, 4.2, paint.teal, DROP.x, 0.04, DROP.z));
+  parent.add(box(5.6, 0.06, 5, paint.teal, DROP.x, 0.04, DROP.z));
   parent.add(cyl(0.16, 7.6, paint.dark, DROP.x, 3.8, DROP.z));
   for (let y = 1.4; y <= 7.2; y += 1.15) bulb(parent, DROP.x + 0.28, y, DROP.z, 0xf2c14e);
   const car = rig('rig-drop', DROP.x, DROP.low, DROP.z);
-  car.add(box(1.7, 0.14, 1.7, paint.yellow, 0, 0, 0));
-  car.add(box(1.7, 0.45, 0.08, paint.red, 0, 0.28, -0.78));
-  car.add(box(0.08, 0.45, 1.55, paint.red, -0.78, 0.28, 0));
-  car.add(box(0.08, 0.45, 1.55, paint.red, 0.78, 0.28, 0));
+  car.add(box(2.7, 0.14, 2.35, paint.yellow, 0, 0, 0));
+  car.add(box(2.7, 0.5, 0.08, paint.red, 0, 0.3, -1.12));
+  car.add(box(2.7, 0.5, 0.08, paint.red, 0, 0.3, 1.12));
+  car.add(box(0.08, 0.5, 2.2, paint.red, -1.3, 0.3, 0));
+  car.add(box(0.08, 0.5, 2.2, paint.red, 1.3, 0.3, 0));
   parent.add(car);
   parent.add(fairLabel('מגדל הנפילה', DROP.x, 8.15, DROP.z, 2.8));
 }
@@ -543,8 +687,9 @@ function buildShip(parent: THREE.Group): void {
   ship.add(box(0.08, 1.5, 0.08, paint.dark, 0.1, SHIP.deck + 0.95, 0));
   ship.add(box(1.2, 1.15, 0.05, paint.white, 0.1, SHIP.deck + 1.0, 0.03));
   ship.add(box(1.2, 0.16, 0.06, paint.red, 0.1, SHIP.deck + 1.0, 0.06));
-  ship.add(box(0.72, 0.08, 0.5, paint.blue, -0.55, SHIP.deck + 0.12, 0));
-  ship.add(box(0.72, 0.08, 0.5, paint.orange, 0.55, SHIP.deck + 0.12, 0));
+  for (const x of SHIP_X) {
+    ship.add(box(0.55, 0.08, 0.48, x < 0 ? paint.blue : paint.orange, x, SHIP.deck + 0.12, 0));
+  }
   parent.add(ship);
   parent.add(fairLabel('ספינת פיראטים', 0, 5.35, 2.2, 3));
 }
@@ -589,8 +734,47 @@ function buildBumpers(parent: THREE.Group): void {
   parent.add(fairLabel('מכוניות מתנגשות', 13.8, 1.7, -5.2, 3.2));
 }
 
+const curbMat = new THREE.MeshStandardMaterial({ color: 0x6d7580, roughness: 0.92 });
+
+function layPath(parent: THREE.Object3D, x: number, z: number, w: number, d: number): void {
+  parent.add(box(w, 0.07, d, mats.sidewalk, x, 0.045, z));
+  if (d >= w) {
+    parent.add(box(0.14, 0.09, d, curbMat, x - w / 2, 0.05, z));
+    parent.add(box(0.14, 0.09, d, curbMat, x + w / 2, 0.05, z));
+  } else {
+    parent.add(box(w, 0.09, 0.14, curbMat, x, 0.05, z - d / 2));
+    parent.add(box(w, 0.09, 0.14, curbMat, x, 0.05, z + d / 2));
+  }
+}
+
+function buildPaths(parent: THREE.Group): void {
+  layPath(parent, 0, 18, 2.6, 9.2);
+  layPath(parent, 0, 12.2, 44, 2.5);
+  layPath(parent, 0, 8.3, 2.4, 7.6);
+  layPath(parent, -10.5, 3.8, 2.1, 16.8);
+  layPath(parent, 10.5, 3.8, 2.1, 16.8);
+  layPath(parent, -1, -4.6, 36, 2.2);
+  layPath(parent, 0, -10.2, 2.4, 11.2);
+  layPath(parent, 18.2, 10.55, 4.8, 2.2);
+  layPath(parent, -16, -6.15, 4.8, 2.2);
+  layPath(parent, 13.8, -5.5, 6.6, 1.7);
+  for (const rideId of Object.keys(LINES)) {
+    const spec = LINES[rideId];
+    const spots = lunaLine(rideId);
+    for (const spot of spots) {
+      const mark = box(spec.along === 'x' ? 0.7 : 0.46, 0.035, spec.along === 'x' ? 0.46 : 0.7, paint.yellow, spot.x, 0.1, spot.z);
+      parent.add(mark);
+      const px = spot.x + (spec.along === 'z' ? -0.42 : 0);
+      const pz = spot.z + (spec.along === 'x' ? 0.42 : 0);
+      parent.add(cyl(0.055, 0.48, paint.gold, px, 0.28, pz));
+    }
+    const tail = spots[spots.length - 1];
+    if (tail) parent.add(fairLabel('תור', tail.x, 1.45, tail.z, 1.2));
+  }
+}
+
 function buildFair(parent: THREE.Group): void {
-  parent.add(box(3.4, 0.05, 18, mats.sidewalk, 0, 0.03, 13));
+  buildPaths(parent);
   for (const side of [-1, 1]) {
     const post = box(0.22, 3.5, 0.22, paint.red, side * 2.3, 1.75, 18.4);
     parent.add(post);

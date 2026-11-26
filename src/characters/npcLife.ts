@@ -4,7 +4,7 @@ import type { MemoryStore } from '../core/MemoryStore';
 import type { NpcManager } from './NpcManager';
 import { STRENGTH_LABELS, ZONE_LABELS, emptyStrengths, type StrengthId, type StrengthMap, type ZoneId } from '../core/types';
 import { allRides, approachOf, rideById, sampleRide, type RidePose } from '../world/playground';
-import { allLunaRides, approachLuna, lunaRideById, sampleLuna } from '../world/lunaPark';
+import { allLunaRides, approachLuna, lunaLine, lunaRideById, lunaRoute, sampleLuna } from '../world/lunaPark';
 
 function anyRide(id: string) {
   return rideById(id) ?? lunaRideById(id);
@@ -83,13 +83,18 @@ interface Life {
   x: number;
   z: number;
   yaw: number;
-  phase: 'walk' | 'act' | 'talk' | 'leave' | 'ride';
+  phase: 'walk' | 'act' | 'talk' | 'leave' | 'ride' | 'queue';
   goalX: number;
   goalZ: number;
   viaX: number | null;
   viaZ: number | null;
+  trail: Array<{ x: number; z: number }>;
   /** Set while walking from a park arrival to the chosen playground piece. */
   headingToRide: boolean;
+  /** Standing in line, or walking to a queue mark. */
+  queuing: boolean;
+  /** Queue index last used to choose the walking goal. */
+  lined: number;
   rideId: string | null;
   rideSlot: number;
   rideTries: number;
@@ -436,8 +441,8 @@ const PLACES: Place[] = [
   { id: 'yellow-window', zone: 'home_yellow', name: 'החלון לגינה', x: 8.2, z: 8.4, yaw: 0, kind: 'home' },
   { id: 'luna-gate', zone: 'luna', name: 'הכניסה ללונה פארק', x: 0, z: 16.2, yaw: Math.PI, kind: 'street' },
   { id: 'luna-mid', zone: 'luna', name: 'השביל המרכזי', x: 0, z: 8, yaw: Math.PI, kind: 'play' },
-  { id: 'luna-west', zone: 'luna', name: 'ליד הגלגל', x: -8, z: 2, yaw: 0.4, kind: 'play' },
-  { id: 'luna-east', zone: 'luna', name: 'ליד המגדל', x: 8, z: 2, yaw: -0.4, kind: 'play' },
+  { id: 'luna-west', zone: 'luna', name: 'השביל המערבי', x: -10.5, z: 2, yaw: 0.4, kind: 'play' },
+  { id: 'luna-east', zone: 'luna', name: 'השביל המזרחי', x: 10.5, z: 2, yaw: -0.4, kind: 'play' },
 ];
 
 const EXIT: Record<ZoneId, { x: number; z: number }> = {
@@ -543,6 +548,7 @@ export class NpcLifeDirector {
   private captionCooldown = 0;
   private paused = false;
   private playerClaim: { id: string; slot: number } | null = null;
+  private readonly lines = new Map<string, string[]>();
   seeded = false;
 
   constructor(
@@ -567,7 +573,7 @@ export class NpcLifeDirector {
   slotTaken(id: string, slot: number): boolean {
     if (this.playerClaim?.id === id && this.playerClaim.slot === slot) return true;
     for (const life of this.people.values()) {
-      if (life.rideId !== id || life.rideSlot !== slot) continue;
+      if (life.rideId !== id || life.rideSlot !== slot || life.queuing) continue;
       if (life.phase === 'ride' || life.headingToRide) return true;
     }
     return false;
@@ -575,11 +581,60 @@ export class NpcLifeDirector {
 
   freeSlot(id: string): number {
     const ride = anyRide(id);
-    if (!ride) return 0;
+    if (!ride) return -1;
     for (let slot = 0; slot < ride.slots; slot++) {
       if (!this.slotTaken(id, slot)) return slot;
     }
-    return 0;
+    return -1;
+  }
+
+  joinQueue(rideId: string, personId: string): number {
+    this.leaveQueue(personId);
+    const spots = lunaLine(rideId);
+    if (!spots.length) return -1;
+    const line = this.lineFor(rideId);
+    if (line.length >= spots.length) return -1;
+    line.push(personId);
+    return line.length - 1;
+  }
+
+  leaveQueue(personId: string): void {
+    for (const line of this.lines.values()) {
+      const index = line.indexOf(personId);
+      if (index >= 0) line.splice(index, 1);
+    }
+  }
+
+  queuePose(rideId: string, personId: string): { x: number; z: number; yaw: number } | null {
+    const index = this.queueIndex(rideId, personId);
+    if (index < 0) return null;
+    return this.queueSpot(rideId, index);
+  }
+
+  queuePlace(rideId: string, personId: string): number {
+    const index = this.queueIndex(rideId, personId);
+    return index < 0 ? 0 : index + 1;
+  }
+
+  isQueueFront(rideId: string, personId: string): boolean {
+    return this.lineFor(rideId)[0] === personId;
+  }
+
+  private lineFor(rideId: string): string[] {
+    let line = this.lines.get(rideId);
+    if (!line) {
+      line = [];
+      this.lines.set(rideId, line);
+    }
+    return line;
+  }
+
+  private queueIndex(rideId: string, personId: string): number {
+    return this.lineFor(rideId).indexOf(personId);
+  }
+
+  private queueSpot(rideId: string, index: number): { x: number; z: number; yaw: number } | null {
+    return lunaLine(rideId)[index] ?? null;
   }
 
   seed(profiles: Array<{ id: string; strengths?: Partial<StrengthMap> }>, hour: number): void {
@@ -622,10 +677,15 @@ export class NpcLifeDirector {
     const place = placeById.get(life.placeId);
     const event = this.currentEvent(life);
     const ride = life.rideId ? anyRide(life.rideId) : undefined;
+    const queuePlace = life.rideId ? this.queueIndex(life.rideId, life.id) + 1 : 1;
     const doing =
-      life.phase === 'ride'
+      life.phase === 'queue'
+        ? `בתור ל${ride?.name ?? 'מתקן'}, מקום ${queuePlace}`
+        : life.phase === 'ride'
         ? life.rideLine || `על ${ride?.name ?? 'מתקן'}`
-        : life.headingToRide && life.phase === 'walk'
+        : life.queuing && life.phase === 'walk'
+          ? `הולך לתור של ${ride?.name ?? 'מתקן'}`
+          : life.headingToRide && life.phase === 'walk'
           ? `הולך אל ${ride?.name ?? 'מתקן'}`
           : life.phase === 'walk'
             ? `הולך ברגל אל ${place?.name ?? 'המקום הבא'}`
@@ -636,7 +696,7 @@ export class NpcLifeDirector {
                 : (event?.line ?? 'נח לרגע');
     return {
       zone: ZONE_LABELS[life.zone],
-      place: ride && (life.phase === 'ride' || life.headingToRide) ? ride.name : (place?.name ?? ''),
+      place: ride && (life.phase === 'ride' || life.phase === 'queue' || life.headingToRide) ? ride.name : (place?.name ?? ''),
       step: `תחנה ${life.index + 1} מתוך ${life.route.length}`,
       doing,
       strengths: { ...life.strengths },
@@ -700,7 +760,10 @@ export class NpcLifeDirector {
       goalZ: place.z,
       viaX: null,
       viaZ: null,
+      trail: [],
       headingToRide: false,
+      queuing: false,
+      lined: -1,
       rideId: null,
       rideSlot: 0,
       rideTries: 0,
@@ -737,6 +800,7 @@ export class NpcLifeDirector {
     life.talkCooldown = Math.max(0, life.talkCooldown - dt);
     if (life.phase === 'talk') return this.stepTalk(life, dt, clock, true);
     if (life.phase === 'ride') return this.stepRide(life, dt, clock, true);
+    if (life.phase === 'queue') return this.stepQueue(life, dt, clock, true);
     if (life.phase === 'walk' || life.phase === 'leave') return this.stepWalk(life, dt, clock, playerX, playerZ, true);
     return this.stepAct(life, dt, clock, true, playerX, playerZ);
   }
@@ -745,11 +809,20 @@ export class NpcLifeDirector {
     life.talkCooldown = Math.max(0, life.talkCooldown - dt);
     if (life.phase === 'talk') this.stepTalk(life, dt, clock, false);
     else if (life.phase === 'ride') this.stepRide(life, dt, clock, false);
+    else if (life.phase === 'queue') this.stepQueue(life, dt, clock, false);
     else if (life.phase === 'walk' || life.phase === 'leave') this.stepWalk(life, dt, clock, life.x, life.z, false);
     else this.stepAct(life, dt, clock, false, 999, 999);
   }
 
   private stepWalk(life: Life, dt: number, clock: GameClock, playerX: number, playerZ: number, visible: boolean): string | null {
+    if (life.queuing && life.rideId && life.phase === 'walk') {
+      const index = this.queueIndex(life.rideId, life.id);
+      if (index >= 0 && index !== life.lined) {
+        life.lined = index;
+        const spot = this.queueSpot(life.rideId, index);
+        if (spot) this.plan(life, spot.x, spot.z);
+      }
+    }
     const tx = life.viaX ?? life.goalX;
     const tz = life.viaZ ?? life.goalZ;
     const dx = tx - life.x;
@@ -757,8 +830,16 @@ export class NpcLifeDirector {
     const dist = Math.hypot(dx, dz);
     if (dist < 0.45) {
       if (life.viaX !== null) {
-        life.viaX = null;
-        life.viaZ = null;
+        if (life.trail.length) {
+          const next = life.trail.shift();
+          if (next) {
+            life.viaX = next.x;
+            life.viaZ = next.z;
+          }
+        } else {
+          life.viaX = null;
+          life.viaZ = null;
+        }
         life.stuck = 0;
         life.progress = 999;
         return null;
@@ -821,9 +902,11 @@ export class NpcLifeDirector {
       this.npcs.playClip(life.id, 'walk', true);
       const place = placeById.get(life.placeId);
       const ride = life.headingToRide && life.rideId ? anyRide(life.rideId) : undefined;
-      const status = ride
-        ? `הולך אל ${ride.name}`
-        : life.phase === 'leave'
+      const status = life.queuing && ride
+        ? `הולך לתור של ${ride.name}`
+        : ride
+          ? `הולך אל ${ride.name}`
+          : life.phase === 'leave'
           ? 'הולך למקום הבא'
           : `הולך אל ${place?.name ?? 'המקום'}`;
       this.npcs.setStatus(life.id, status);
@@ -946,6 +1029,14 @@ export class NpcLifeDirector {
       this.beginPark(life);
       return;
     }
+    this.beginPlaceEvent(life);
+  }
+
+  private beginPlaceEvent(life: Life): void {
+    this.leaveQueue(life.id);
+    life.queuing = false;
+    life.headingToRide = false;
+    life.rideId = null;
     const place = placeById.get(life.placeId);
     const events = openEvents(place?.kind ?? 'street', life);
     const event = events[Math.floor(Math.random() * events.length)];
@@ -974,64 +1065,162 @@ export class NpcLifeDirector {
   }
 
   private beginPark(life: Life): void {
-    if (life.headingToRide && life.rideId) {
+    if (life.queuing && life.rideId) {
+      life.phase = 'queue';
+      life.seconds = 0;
+      life.headingToRide = false;
+      const index = this.queueIndex(life.rideId, life.id);
+      const spot = index >= 0 ? this.queueSpot(life.rideId, index) : null;
+      if (spot) {
+        life.x = spot.x;
+        life.z = spot.z;
+        life.yaw = spot.yaw;
+      }
+      return;
+    }
+    if (life.headingToRide && life.rideId && life.rideSlot >= 0) {
       const spot = anyApproach(life.rideId, life.rideSlot);
       const far = Math.hypot(life.x - spot.x, life.z - spot.z);
       if (far > 1.8 && life.rideTries < 2) {
         life.rideTries += 1;
         life.phase = 'walk';
-        life.goalX = spot.x;
-        life.goalZ = spot.z;
-        life.viaX = null;
-        life.viaZ = null;
-        life.stuck = 0;
-        life.hops = 0;
-        life.progress = 999;
+        this.plan(life, spot.x, spot.z);
         return;
       }
       life.phase = 'ride';
       life.seconds = 0;
       life.eventId = null;
       life.headingToRide = false;
+      life.queuing = false;
       return;
     }
     const pick = this.pickRide(life);
+    if (!pick) {
+      this.beginPlaceEvent(life);
+      return;
+    }
+    if ('queue' in pick) {
+      const index = this.joinQueue(pick.id, life.id);
+      if (index < 0) {
+        this.beginPlaceEvent(life);
+        return;
+      }
+      life.queuing = true;
+      life.lined = index;
+      life.rideId = pick.id;
+      life.rideSlot = -1;
+      life.headingToRide = true;
+      life.rideTries = 0;
+      life.eventId = null;
+      life.rideLine = '';
+      life.phase = 'walk';
+      const spot = this.queueSpot(pick.id, index);
+      if (spot) this.plan(life, spot.x, spot.z);
+      return;
+    }
+    life.queuing = false;
     life.rideId = pick.id;
     life.rideSlot = pick.slot;
     life.headingToRide = true;
     life.rideTries = 0;
     life.eventId = null;
     life.rideLine = '';
-    const spot = anyApproach(pick.id, pick.slot);
     life.phase = 'walk';
-    life.goalX = spot.x;
-    life.goalZ = spot.z;
-    life.viaX = null;
-    life.viaZ = null;
-    life.stuck = 0;
-    life.hops = 0;
-    life.progress = 999;
+    const spot = anyApproach(pick.id, pick.slot);
+    this.plan(life, spot.x, spot.z);
   }
 
-  private pickRide(self: Life): { id: string; slot: number } {
-    const open: Array<{ id: string; slot: number }> = [];
-    for (const ride of ridesHere(self.zone)) {
+  private pickRide(self: Life): { id: string; slot: number } | { id: string; queue: true } | null {
+    const info = ridesHere(self.zone).map((ride) => {
+      let busy = 0;
+      const open: number[] = [];
       for (let slot = 0; slot < ride.slots; slot++) {
-        let taken = this.playerClaim?.id === ride.id && this.playerClaim.slot === slot;
-        if (!taken) {
-          for (const other of this.people.values()) {
-            if (other.id === self.id || other.zone !== self.zone || other.rideId !== ride.id || other.rideSlot !== slot) continue;
-            if (other.phase === 'ride' || other.headingToRide) {
-              taken = true;
-              break;
-            }
-          }
-        }
-        if (!taken) open.push({ id: ride.id, slot });
+        if (this.slotTaken(ride.id, slot)) busy += 1;
+        else open.push(slot);
       }
+      return { ride, busy, open, line: this.lineFor(ride.id).length, lineCap: lunaLine(ride.id).length };
+    });
+    const sharedOpen = info.filter((item) => item.busy > 0 && item.open.length > 0);
+    const emptyOpen = info.filter((item) => item.busy === 0 && item.open.length > 0);
+    const canQueue = info.filter((item) => item.lineCap > 0 && item.line < item.lineCap && item.busy > 0 && item.open.length === 0);
+    const seatOf = (item: (typeof info)[number]) => {
+      const slot = item.open[Math.floor(Math.random() * item.open.length)];
+      return { id: item.ride.id, slot };
+    };
+    if (sharedOpen.length && Math.random() < 0.75) return seatOf(sharedOpen[Math.floor(Math.random() * sharedOpen.length)]);
+    if (canQueue.length && Math.random() < 0.55) {
+      canQueue.sort((a, b) => b.busy - a.busy || a.line - b.line);
+      return { id: canQueue[0].ride.id, queue: true };
     }
-    const pool = open.length ? open : ridesHere(self.zone).map((ride) => ({ id: ride.id, slot: 0 }));
-    return pool[Math.floor(Math.random() * pool.length)];
+    if (emptyOpen.length) return seatOf(emptyOpen[Math.floor(Math.random() * emptyOpen.length)]);
+    if (sharedOpen.length) return seatOf(sharedOpen[Math.floor(Math.random() * sharedOpen.length)]);
+    if (canQueue.length) {
+      canQueue.sort((a, b) => a.line - b.line || b.busy - a.busy);
+      return { id: canQueue[0].ride.id, queue: true };
+    }
+    const anyLine = info.filter((item) => item.lineCap > 0 && item.line < item.lineCap);
+    if (!anyLine.length) return null;
+    anyLine.sort((a, b) => a.line - b.line);
+    return { id: anyLine[0].ride.id, queue: true };
+  }
+
+  private stepQueue(life: Life, dt: number, clock: GameClock, visible: boolean): string | null {
+    const ride = anyRide(life.rideId ?? '');
+    if (!ride || !life.rideId) {
+      life.queuing = false;
+      life.phase = 'walk';
+      return null;
+    }
+    const index = this.queueIndex(life.rideId, life.id);
+    if (index < 0) {
+      life.queuing = false;
+      this.beginPark(life);
+      return null;
+    }
+    const spot = this.queueSpot(life.rideId, index);
+    if (!spot) return null;
+    const dx = spot.x - life.x;
+    const dz = spot.z - life.z;
+    const dist = Math.hypot(dx, dz) || 0;
+    if (dist > 0.18) {
+      const step = Math.min(dist, 2.2 * dt);
+      life.x += (dx / dist) * step;
+      life.z += (dz / dist) * step;
+      life.yaw = Math.atan2(dx, dz);
+      if (visible) {
+        this.npcs.holdAt(life.id, life.x, life.z, life.yaw);
+        this.npcs.playClip(life.id, 'walk', true);
+        this.npcs.setStatus(life.id, `מתקדם בתור ל${ride.name}`);
+      }
+      return null;
+    }
+    life.x = spot.x;
+    life.z = spot.z;
+    life.yaw = spot.yaw;
+    if (visible) {
+      this.npcs.holdAt(life.id, spot.x, spot.z, spot.yaw);
+      this.npcs.playClip(life.id, 'idle', true);
+      this.npcs.setStatus(life.id, `בתור ל${ride.name}, מקום ${index + 1}`);
+    }
+    if (index === 0) {
+      const slot = this.freeSlot(ride.id);
+      if (slot >= 0) this.boardFromQueue(life, slot);
+    }
+    void clock;
+    return null;
+  }
+
+  private boardFromQueue(life: Life, slot: number): void {
+    if (!life.rideId) return;
+    this.leaveQueue(life.id);
+    life.queuing = false;
+    life.lined = -1;
+    life.rideSlot = slot;
+    life.headingToRide = true;
+    life.rideTries = 0;
+    life.phase = 'walk';
+    const spot = anyApproach(life.rideId, slot);
+    this.plan(life, spot.x, spot.z);
   }
 
   private stepRide(life: Life, dt: number, clock: GameClock, visible: boolean): string | null {
@@ -1074,7 +1263,11 @@ export class NpcLifeDirector {
   }
 
   private goNext(life: Life, hour: number): void {
+    this.leaveQueue(life.id);
     life.headingToRide = false;
+    life.queuing = false;
+    life.lined = -1;
+    life.trail = [];
     life.rideId = null;
     life.rideLine = '';
     life.rideTries = 0;
@@ -1086,14 +1279,8 @@ export class NpcLifeDirector {
     if (!next) return;
     if (next.zone !== life.zone) {
       life.phase = 'leave';
-      life.goalX = EXIT[life.zone].x;
-      life.goalZ = EXIT[life.zone].z;
-      life.viaX = null;
-      life.viaZ = null;
       life.seconds = 0;
-      life.stuck = 0;
-      life.hops = 0;
-      life.progress = 999;
+      this.plan(life, EXIT[life.zone].x, EXIT[life.zone].z);
       return;
     }
     life.index += 1;
@@ -1102,20 +1289,33 @@ export class NpcLifeDirector {
     life.placeId = place.id;
     life.phase = 'walk';
     life.seconds = 0;
-    life.stuck = 0;
-    life.hops = 0;
-    life.progress = 999;
     this.aim(life, place, this.crowdIndex(place.id, life.id));
   }
 
   private aim(life: Life, place: Place, slot: number): void {
+    const spread = place.zone === 'luna' ? 0.45 : 0.9;
     const angle = slot * 1.9;
-    life.goalX = place.x + Math.cos(angle) * 0.9;
-    life.goalZ = place.z + Math.sin(angle) * 0.9;
-    life.viaX = null;
-    life.viaZ = null;
     life.placeId = place.id;
     life.zone = place.zone;
+    this.plan(life, place.x + Math.cos(angle) * spread, place.z + Math.sin(angle) * spread);
+  }
+
+  private plan(life: Life, x: number, z: number): void {
+    life.goalX = x;
+    life.goalZ = z;
+    life.trail = [];
+    life.viaX = null;
+    life.viaZ = null;
+    life.stuck = 0;
+    life.hops = 0;
+    life.progress = 999;
+    if (life.zone !== 'luna') return;
+    const points = lunaRoute(life.x, life.z, x, z);
+    const first = points.shift();
+    if (!first) return;
+    life.viaX = first.x;
+    life.viaZ = first.z;
+    life.trail = points;
   }
 
   private crowdIndex(placeId: string, id: string): number {

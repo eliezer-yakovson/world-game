@@ -128,6 +128,7 @@ export class Game {
   private blocked = false;
   private poseMode: 'seat' | 'bed' | null = null;
   private playerRide: { id: string; slot: number; t: number } | null = null;
+  private playerQueue: { id: string; t: number; settled: boolean } | null = null;
   private parkClock = 0;
   private interactCooldown = 0;
   private album: AlbumEntry[] = [];
@@ -496,6 +497,7 @@ export class Game {
   private goToZone(zone: ZoneId): void {
     this.schoolDay.stop();
     this.endPerformance(false);
+    if (this.playerQueue) this.leavePlayerQueue(true);
     if (this.playerRide) this.finishPlayerRide(false, true);
     if (this.player.posing) this.endSeat(false);
     const pausedTask = this.playerTasks.yield(this.player);
@@ -712,6 +714,7 @@ export class Game {
       if (!worldPaused) this.parkClock += dt;
       setRideNow(this.parkClock);
       setLunaNow(this.parkClock);
+      this.advancePlayerQueue(dt, worldPaused);
       this.advancePlayerRide(dt, worldPaused);
       const circles = this.fillCircles(this.playerCircles, 'player');
       this.player.update(dt, this.camera, this.blocked, (next, radius) => this.colliders.resolve(next, radius, circles));
@@ -737,6 +740,13 @@ export class Game {
       if (this.sceneLock) {
         this.ui.showHint(this.performances.active ? 'הסצנה על המסך. כשהיא נעצרת, הבחירה למטה ממשיכה אותה.' : 'בחרו למטה איך הסצנה תיראה');
         this.player.consumeInteract();
+      } else if (this.playerQueue) {
+        const place = this.life.queuePlace(this.playerQueue.id, 'player');
+        this.ui.showHint(place > 0 ? `[E] לצאת מהתור · מקום ${place}` : '[E] לצאת מהתור');
+        if (this.interactCooldown <= 0 && this.player.consumeInteract()) {
+          this.leavePlayerQueue();
+          this.interactCooldown = 0.45;
+        }
       } else if (this.player.pinned) {
         this.ui.showHint('[E] לרדת');
         if (this.interactCooldown <= 0 && this.player.consumeInteract()) {
@@ -924,13 +934,96 @@ export class Game {
     if (!ride) return;
     if (this.player.posing) this.endSeat(false);
     this.playerTasks.yield(this.player);
+    if (this.playerQueue) this.leavePlayerQueue(true);
     if (this.playerRide) this.finishPlayerRide(false, true);
-    const preferred = Number.isFinite(slot) ? slot : 0;
-    const chosen = this.life.slotTaken(id, preferred) ? this.life.freeSlot(id) : preferred;
+    let chosen = Number.isFinite(slot) ? slot : 0;
+    if (chosen < 0 || chosen >= ride.slots || this.life.slotTaken(id, chosen)) chosen = this.life.freeSlot(id);
+    if (chosen < 0) {
+      this.standInQueue(id);
+      return;
+    }
     this.life.claimRide(id, chosen);
     this.playerRide = { id, slot: chosen, t: 0 };
     this.player.setPin(knownSample(id, chosen, 0));
     this.ui.showCaption(`${ride.blurb}. E כדי לרדת`);
+  }
+
+  private standInQueue(id: string): void {
+    const ride = knownRide(id);
+    if (!ride) return;
+    if (this.player.posing) this.endSeat(false);
+    this.playerTasks.yield(this.player);
+    if (this.playerRide) this.finishPlayerRide(false, true);
+    const index = this.life.joinQueue(id, 'player');
+    if (index < 0) {
+      this.ui.showCaption('התור מלא. נסו מתקן אחר.');
+      return;
+    }
+    this.playerQueue = { id, t: 0, settled: false };
+    const spot = this.life.queuePose(id, 'player');
+    if (spot) {
+      this.player.setPin({ x: spot.x, y: 0, z: spot.z, yaw: spot.yaw, pitch: 0, roll: 0, emote: 'idle', loop: true });
+    }
+    this.ui.showCaption(`עמדתם בתור ל${ride.name}, מקום ${index + 1}. E כדי לצאת`);
+  }
+
+  private leavePlayerQueue(quiet = false): void {
+    const was = this.playerQueue;
+    this.life.leaveQueue('player');
+    this.playerQueue = null;
+    if (was && !this.playerRide) this.player.clearPin();
+    if (was && !quiet) this.ui.showCaption('יצאתם מהתור');
+  }
+
+  private advancePlayerQueue(dt: number, paused: boolean): void {
+    const ticket = this.playerQueue;
+    if (!ticket) return;
+    const spot = this.life.queuePose(ticket.id, 'player');
+    if (!spot) {
+      this.playerQueue = null;
+      if (!this.playerRide) this.player.clearPin();
+      return;
+    }
+    if (!paused && !this.blocked) ticket.t += dt;
+    const dx = spot.x - this.player.position.x;
+    const dz = spot.z - this.player.position.z;
+    const dist = Math.hypot(dx, dz);
+    const arrived = dist < 0.22;
+    let x = spot.x;
+    let z = spot.z;
+    let yaw = spot.yaw;
+    if (!arrived && dist > 8) {
+      x = spot.x;
+      z = spot.z;
+    } else if (!arrived && dist > 0.001) {
+      const step = Math.min(dist, 2.4 * dt);
+      x = this.player.position.x + (dx / dist) * step;
+      z = this.player.position.z + (dz / dist) * step;
+      yaw = Math.atan2(dx, dz);
+    }
+    if (!arrived) ticket.settled = false;
+    this.player.setPin({
+      x,
+      y: 0,
+      z,
+      yaw,
+      pitch: 0,
+      roll: 0,
+      emote: arrived ? 'idle' : 'walk',
+      loop: true,
+    });
+    if (!arrived) return;
+    if (!ticket.settled) {
+      ticket.settled = true;
+      ticket.t = 0;
+      return;
+    }
+    if (paused || this.blocked || ticket.t < 0.85) return;
+    if (!this.life.isQueueFront(ticket.id, 'player')) return;
+    const slot = this.life.freeSlot(ticket.id);
+    if (slot < 0) return;
+    this.ui.showCaption('התור שלכם. עולים.');
+    this.beginRide(ticket.id, slot);
   }
 
   private advancePlayerRide(dt: number, paused: boolean): void {
@@ -1006,6 +1099,9 @@ export class Game {
         break;
       case 'ride':
         this.beginRide(String(data.ride ?? ''), Number(data.slot ?? 0));
+        break;
+      case 'queue':
+        this.standInQueue(String(data.ride ?? ''));
         break;
       case 'sleep':
         this.needs.sleep(70);

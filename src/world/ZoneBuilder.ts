@@ -3,7 +3,7 @@ import { SCHOOL_SEATS, TEACHERS, schoolSpawns } from '../characters/schoolDay';
 import { box, cyl, mats } from './materials';
 import { encountersIn } from '../scenes/encounters';
 import { buildPlayground, playgroundSpots } from './playground';
-import { buildLunaPark, lunaSpots } from './lunaPark';
+import { buildLunaPark, lunaQueues, lunaSpots } from './lunaPark';
 import type { ZoneId } from '../core/types';
 
 export interface Interactable {
@@ -1287,9 +1287,19 @@ function buildLuna(): ZoneBuildResult {
       id: `ride-${spot.id}-${spot.slot}`,
       label: spot.label,
       position: new THREE.Vector3(spot.x, 0, spot.z),
-      radius: 1.65,
+      radius: 1.05,
       type: 'activity',
       data: { action: 'ride', ride: spot.id, slot: spot.slot },
+    });
+  }
+  for (const line of lunaQueues()) {
+    interactables.push({
+      id: `queue-${line.id}`,
+      label: line.label,
+      position: new THREE.Vector3(line.x, 0, line.z),
+      radius: 1.35,
+      type: 'activity',
+      data: { action: 'queue', ride: line.id },
     });
   }
   interactables.push({

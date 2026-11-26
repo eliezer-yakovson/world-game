@@ -75,20 +75,20 @@ interface Job {
 }
 
 const STATIONS: Record<string, Station> = {
-  rug: { x: -1.5, z: 1.65, yaw: 0.3 },
-  hall: { x: 0.35, z: 5.05, yaw: 0 },
-  table: { x: 2.05, z: -3.45, yaw: 0.4 },
-  kitchen: { x: 6.15, z: -5.05, yaw: Math.PI },
-  draw: { x: -6.35, z: 1.2, yaw: 0 },
-  toys: { x: -6.05, z: 3.85, yaw: 0.4 },
-  ball: { x: -4.85, z: 5.05, yaw: -0.2 },
-  castle: { x: -7.25, z: 2.35, yaw: 0.3 },
-  road: { x: -4.7, z: 3.15, yaw: -0.4 },
-  sofa: { x: -1.55, z: 2.4, yaw: 0 },
-  plant: { x: 2.45, z: 1.15, yaw: 0.8 },
-  laundry: { x: 6.55, z: 3.45, yaw: 0.6 },
-  radio: { x: 1.15, z: 4.7, yaw: 0.5 },
-  bed: { x: -4.15, z: -2.75, yaw: Math.PI },
+  rug: { x: -0.4, z: 4.2, yaw: 0.2 },
+  hall: { x: 0, z: 8.6, yaw: Math.PI },
+  table: { x: 5.2, z: -5.2, yaw: 0.6 },
+  kitchen: { x: 10.4, z: -9.2, yaw: Math.PI },
+  draw: { x: -12.6, z: 3.7, yaw: Math.PI },
+  toys: { x: -11, z: 6.2, yaw: 0.4 },
+  ball: { x: -9.2, z: 7.6, yaw: -0.2 },
+  castle: { x: -13.4, z: 4.6, yaw: 0.4 },
+  road: { x: -9.4, z: 4.4, yaw: -0.3 },
+  sofa: { x: -2.2, z: 4.8, yaw: 0 },
+  plant: { x: 4.2, z: 3.3, yaw: 0.8 },
+  laundry: { x: 13.2, z: 5.4, yaw: 0.4 },
+  radio: { x: 3.4, z: 8.2, yaw: 0.6 },
+  bed: { x: -10, z: -6.6, yaw: Math.PI },
 };
 
 const CLIP: Record<TaskKind, { kind: string; loop: boolean }> = {

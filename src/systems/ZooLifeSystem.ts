@@ -20,6 +20,8 @@ interface Pet {
   homeX: number;
   homeZ: number;
   time: number;
+  /** Feet correction while the body stays upright. Recomputed when it pitches. */
+  flatLift?: number;
 }
 
 const KINDS = ['wolf', 'horse', 'fox', 'deer', 'cow', 'husky', 'cat', 'bunny', 'chick', 'dog'] as const;
@@ -60,11 +62,21 @@ export class ZooLifeSystem {
       const pose = behave(pet.kind, pet.time);
       const x = THREE.MathUtils.clamp(pose.x, -1.55, 1.55);
       const z = THREE.MathUtils.clamp(pose.z, -1.25, 1.25);
-      pet.anchor.position.set(pet.homeX + x, pose.y, pet.homeZ + z);
       pet.anchor.rotation.order = 'YXZ';
       pet.anchor.rotation.y = pose.yaw;
       pet.anchor.rotation.x = pose.pitch;
-      this.plantFeet(pet.anchor);
+      if (Math.abs(pose.pitch) < 0.02) {
+        if (pet.flatLift === undefined) {
+          pet.anchor.position.set(pet.homeX + x, pose.y, pet.homeZ + z);
+          this.plantFeet(pet.anchor);
+          pet.flatLift = pet.anchor.position.y - pose.y;
+        }
+        pet.anchor.position.set(pet.homeX + x, pose.y + pet.flatLift, pet.homeZ + z);
+      } else {
+        pet.flatLift = undefined;
+        pet.anchor.position.set(pet.homeX + x, pose.y, pet.homeZ + z);
+        this.plantFeet(pet.anchor);
+      }
     }
     this.keepApart();
   }

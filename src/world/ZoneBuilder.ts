@@ -1,5 +1,9 @@
 import * as THREE from 'three';
+import { SCHOOL_SEATS, TEACHERS, schoolSpawns } from '../characters/schoolDay';
 import { box, cyl, mats } from './materials';
+import { encountersIn } from '../scenes/encounters';
+import { buildPlayground, playgroundSpots } from './playground';
+import { RIDE_TICKET_PRICE, buildLunaPark, lunaQueues, lunaSpots } from './lunaPark';
 import type { ZoneId } from '../core/types';
 
 export interface Interactable {
@@ -97,6 +101,8 @@ export function buildZone(zone: ZoneId): ZoneBuildResult {
       return buildPark();
     case 'zoo':
       return buildZoo();
+    case 'luna':
+      return buildLuna();
   }
 }
 
@@ -207,6 +213,26 @@ function zebra(group: THREE.Group, x: number, z: number, along: 'x' | 'z', mat: 
   }
 }
 
+function addEncounters(zone: ZoneId, group: THREE.Group, interactables: Interactable[]): void {
+  for (const encounter of encountersIn(zone)) {
+    const { x, z } = encounter.spot;
+    const pole = box(0.08, 1.15, 0.08, mats.wood, x, 0.55, z);
+    pole.name = `encounter-${encounter.id}`;
+    pole.userData.noCollide = true;
+    const flag = box(0.32, 0.16, 0.04, mats.play, x + 0.18, 1.02, z);
+    flag.userData.noCollide = true;
+    group.add(pole, flag);
+    interactables.push({
+      id: `encounter-${encounter.id}`,
+      label: encounter.label,
+      position: new THREE.Vector3(x, 0, z),
+      radius: 1.7,
+      type: 'activity',
+      data: { action: 'encounter', scene: encounter.id },
+    });
+  }
+}
+
 function buildNeighborhood(): ZoneBuildResult {
   const group = new THREE.Group();
   group.name = 'zone-neighborhood';
@@ -254,7 +280,7 @@ function buildNeighborhood(): ZoneBuildResult {
   ];
   for (const [x, z, mat, name, prop] of homes) {
     const h = house(x, z, mat, name);
-    h.userData.dress = { prop, fit: 'width', value: 7.4 };
+    h.userData.dress = { prop, fit: 'width', value: 9.2 };
     group.add(h);
   }
 
@@ -303,6 +329,7 @@ function buildNeighborhood(): ZoneBuildResult {
   makeSign('המכולת', 14, 7.5, 'shop');
   makeSign('הפארק', 20.2, -6.6, 'park');
   makeSign('גן החיות', 18, -18, 'zoo');
+  makeSign('לונה פארק', -20, -16, 'luna');
 
   // Direct door hotspots at house fronts (easier discovery)
   interactables.push({
@@ -371,6 +398,7 @@ function buildNeighborhood(): ZoneBuildResult {
   });
 
   const carLanes = neighborhoodLanes();
+  addEncounters('neighborhood', group, interactables);
 
   return {
     group,
@@ -398,7 +426,7 @@ function addWall(
   to: number,
   gaps: Array<{ at: number; width: number }>,
 ): void {
-  const height = 3.5;
+  const height = 4.2;
   const thick = 0.22;
   const cuts = gaps.filter((gap) => gap.at - gap.width / 2 < to && gap.at + gap.width / 2 > from).sort((a, b) => a.at - b.at);
   let cursor = from;
@@ -419,8 +447,8 @@ function addWall(
     place(cursor, gap0);
     const header =
       along === 'x'
-        ? box(gap1 - gap0, 0.18, 0.28, mats.wood, (gap0 + gap1) / 2, 2.72, fixed)
-        : box(0.28, 0.18, gap1 - gap0, mats.wood, fixed, 2.72, (gap0 + gap1) / 2);
+        ? box(gap1 - gap0, 0.22, 0.28, mats.wood, (gap0 + gap1) / 2, 3.62, fixed)
+        : box(0.28, 0.22, gap1 - gap0, mats.wood, fixed, 3.62, (gap0 + gap1) / 2);
     header.userData.noCollide = true;
     header.name = 'door-header';
     group.add(header);
@@ -467,242 +495,412 @@ function roomWindow(group: THREE.Group, x: number, z: number, wide: number, axis
   }
 }
 
+function decor(
+  group: THREE.Group,
+  mesh: THREE.Mesh,
+  prop?: string,
+  fit?: 'width' | 'height',
+  value?: number,
+): THREE.Mesh {
+  if (prop && fit && value) mesh.userData.dress = { prop, fit, value };
+  group.add(mesh);
+  return mesh;
+}
+
+/** Noam's house: one long bedroom on the left, an open music room, and a kitchen tucked in the back. */
+function furnishBlue(group: THREE.Group, interactables: Interactable[]): void {
+  const interior = new THREE.MeshStandardMaterial({ color: 0xd5e6f5, roughness: 0.9 });
+  const cloth = new THREE.MeshStandardMaterial({ color: 0x2c5f96 });
+  addWall(group, interior, 'z', -1.2, -11.8, 11.8, [{ at: 0.6, width: 2.6 }]);
+  addWall(group, interior, 'x', -5.6, -1.0, 15.8, [{ at: 7.2, width: 2.5 }]);
+
+  roomFloor(group, 0x7f9cc4, -8.6, 0, 14.4, 23.2);
+  roomFloor(group, 0xd7ebf8, 7.3, 3.1, 16.6, 16.6);
+  roomFloor(group, 0xb7c9d6, 7.3, -8.7, 16.6, 6.4);
+
+  roomWindow(group, -15.82, 2.2, 2.2, 'z');
+  roomWindow(group, -15.82, -6.4, 1.6, 'z');
+  roomWindow(group, 15.82, 6.2, 2, 'z');
+  roomWindow(group, 8.2, -11.82, 2.2, 'x');
+
+  decor(group, box(3.2, 0.8, 1.15, cloth, 9.2, 0.42, 8.6), 'loungeSofa', 'width', 3.2);
+  decor(group, box(1.6, 0.42, 0.9, mats.wood, 9.2, 0.24, 6.7), 'tableCoffee', 'width', 1.6);
+  decor(group, box(0.85, 0.8, 0.85, cloth, 6.2, 0.42, 8.5), 'loungeChair', 'width', 0.9);
+  decor(group, box(0.85, 0.8, 0.85, cloth, 12.2, 0.42, 8.5), 'loungeChair', 'width', 0.9);
+  const rug = decor(group, box(4.6, 0.04, 2.8, new THREE.MeshStandardMaterial({ color: 0x1d4e89 }), 9.2, 0.03, 7.5), 'rugRectangle', 'width', 4.6);
+  rug.userData.noCollide = true;
+  decor(group, box(0.55, 0.7, 0.35, mats.metal, 14.55, 0.4, 5.4), 'televisionModern', 'height', 0.7);
+  decor(group, box(0.5, 0.35, 0.4, mats.wood, 14.2, 0.22, 9.1), 'radio', 'height', 0.4);
+  decor(group, box(0.7, 1.7, 0.55, mats.wood, 14.55, 0.88, 2.4), 'bookcaseOpen', 'height', 1.7);
+  decor(group, box(0.5, 0.75, 0.5, mats.wood, 3.4, 0.4, 8.6), 'pottedPlant', 'height', 0.85);
+  decor(group, box(0.4, 0.5, 0.4, mats.wood, 4.4, 0.28, 4.4), 'plantSmall2', 'height', 0.5);
+
+  decor(group, box(1.05, 1.85, 0.8, mats.metal, 14.4, 0.95, -10.2), 'kitchenFridge', 'height', 1.85);
+  group.add(box(5.4, 0.95, 0.7, mats.wood, 8.4, 0.5, -10.6));
+  const coffee = decor(group, box(0.4, 0.32, 0.35, mats.metal, 10.6, 1.14, -10.55), 'kitchenCoffeeMachine', 'height', 0.34);
+  coffee.userData.noCollide = true;
+  const toaster = decor(group, box(0.38, 0.26, 0.32, mats.metal, 7.4, 1.1, -10.55), 'toaster', 'height', 0.26);
+  toaster.userData.noCollide = true;
+  decor(group, box(1.5, 0.75, 0.95, mats.wood, 6.6, 0.4, -8.2), 'table', 'height', 0.75);
+  decor(group, box(0.5, 0.72, 0.5, mats.wood, 5.3, 0.38, -7.35), 'loungeChair', 'height', 0.72);
+  decor(group, box(0.5, 0.72, 0.5, mats.wood, 7.9, 0.38, -7.35), 'loungeChair', 'height', 0.72);
+
+  decor(group, box(2.4, 0.5, 1.4, new THREE.MeshStandardMaterial({ color: 0x9ec1e8 }), -10.2, 0.28, -7.2), 'bedSingle', 'width', 2.4);
+  decor(group, box(0.5, 0.5, 0.5, mats.wood, -12.6, 0.28, -8.6), 'lampRoundTable', 'height', 0.5);
+  const pillow = decor(group, box(0.45, 0.18, 0.55, new THREE.MeshStandardMaterial({ color: 0xd6ecff }), -9.4, 0.58, -7.2), 'pillowBlue', 'height', 0.2);
+  pillow.userData.noCollide = true;
+  decor(group, box(1.3, 0.75, 0.7, mats.wood, -13.4, 0.4, 4.6), 'table', 'height', 0.75);
+  decor(group, box(0.5, 0.7, 0.5, mats.wood, -12.2, 0.38, 5.5), 'loungeChair', 'height', 0.72);
+  decor(group, box(0.6, 1.8, 1.1, mats.wood, -14.7, 0.92, 1.1), 'bookcaseOpen', 'height', 1.8);
+  decor(group, box(0.55, 0.55, 0.45, mats.wood, -14.3, 0.3, 8.4), 'sideTable', 'height', 0.55);
+  const bedRug = box(3.2, 0.04, 2, new THREE.MeshStandardMaterial({ color: 0x24558a }), -10, 0.03, -5.4);
+  bedRug.userData.noCollide = true;
+  group.add(bedRug);
+  decor(group, box(0.45, 0.6, 0.45, mats.wood, -4.4, 0.32, -8.2), 'plantSmall1', 'height', 0.55);
+
+  interactables.push({
+    id: 'guest-look-blue',
+    label: 'להסתכל על החדר של נועם',
+    position: new THREE.Vector3(-4.4, 0, 0.8),
+    radius: 2,
+    type: 'activity',
+    data: { action: 'visitNoamRoom' },
+  });
+  interactables.push({
+    id: 'guest-snack-blue',
+    label: 'לבקש כיבוד קטן',
+    position: new THREE.Vector3(6.6, 0, -7.4),
+    radius: 1.8,
+    type: 'activity',
+    data: { action: 'guestSnack' },
+  });
+}
+
+/** Maya's house: a wide plant-filled parlor in front, the kitchen on the left, and her room on the right. */
+function furnishYellow(group: THREE.Group, interactables: Interactable[]): void {
+  const interior = new THREE.MeshStandardMaterial({ color: 0xf6e6bf, roughness: 0.9 });
+  const cloth = new THREE.MeshStandardMaterial({ color: 0xd0892b });
+  addWall(group, interior, 'x', 1.2, -15.8, 15.8, [
+    { at: -7.2, width: 2.5 },
+    { at: 7.4, width: 2.5 },
+  ]);
+  addWall(group, interior, 'z', 0.4, -11.8, 1.0, []);
+
+  roomFloor(group, 0xf3d48a, 0, 6.5, 31.4, 10.4);
+  roomFloor(group, 0xe0b56a, -7.8, -5.2, 15.4, 12.4);
+  roomFloor(group, 0xf0c2b0, 8.2, -5.2, 15, 12.4);
+
+  roomWindow(group, -7.2, 11.82, 1.8, 'x');
+  roomWindow(group, 8.4, 11.82, 1.8, 'x');
+  roomWindow(group, -15.82, -5.2, 1.8, 'z');
+  roomWindow(group, 15.82, -4.2, 1.8, 'z');
+
+  decor(group, box(3.1, 0.8, 1.15, cloth, -8.6, 0.42, 8.7), 'loungeSofa', 'width', 3.1);
+  decor(group, box(1.7, 0.55, 1.05, mats.wood, -1.4, 0.3, 6.5), 'table', 'width', 1.7);
+  decor(group, box(0.8, 0.75, 0.8, cloth, -3.5, 0.4, 6.5), 'loungeChair', 'width', 0.85);
+  decor(group, box(0.8, 0.75, 0.8, cloth, 0.7, 0.4, 6.5), 'loungeChair', 'width', 0.85);
+  decor(group, box(0.8, 0.75, 0.8, cloth, -1.4, 0.4, 8.3), 'loungeChair', 'width', 0.85);
+  const rug = decor(group, box(5.2, 0.04, 3.2, new THREE.MeshStandardMaterial({ color: 0xc47b2b }), -2.2, 0.03, 7), 'rugRectangle', 'width', 5.2);
+  rug.userData.noCollide = true;
+  decor(group, box(0.7, 1.7, 0.6, mats.wood, -14.4, 0.88, 7.2), 'bookcaseOpen', 'height', 1.7);
+  decor(group, box(0.5, 0.8, 0.5, mats.wood, 5.2, 0.42, 8.6), 'pottedPlant', 'height', 0.9);
+  decor(group, box(0.45, 0.6, 0.45, mats.wood, 11.2, 0.32, 7.4), 'plantSmall1', 'height', 0.6);
+  decor(group, box(0.4, 0.55, 0.4, mats.wood, 4.2, 0.3, 4.6), 'plantSmall2', 'height', 0.55);
+  decor(group, box(0.55, 0.4, 0.45, mats.wood, 13.2, 0.22, 8.8), 'radio', 'height', 0.4);
+  group.add(box(1.8, 0.42, 0.55, cloth, 8.6, 0.24, 10.35));
+
+  group.add(box(0.7, 0.95, 4.6, mats.wood, -14.7, 0.5, -5.4));
+  decor(group, box(0.9, 1.85, 0.75, mats.metal, -14.2, 0.95, -9.8), 'kitchenFridge', 'height', 1.85);
+  const microwave = decor(group, box(0.45, 0.3, 0.35, mats.metal, -14.55, 1.15, -3.4), 'kitchenMicrowave', 'height', 0.3);
+  microwave.userData.noCollide = true;
+  decor(group, box(1.6, 0.75, 1, mats.wood, -6.2, 0.4, -6.2), 'table', 'height', 0.75);
+  decor(group, box(0.5, 0.72, 0.5, mats.wood, -7.6, 0.38, -5.3), 'loungeChair', 'height', 0.72);
+  decor(group, box(0.5, 0.72, 0.5, mats.wood, -4.8, 0.38, -5.3), 'loungeChair', 'height', 0.72);
+  decor(group, box(0.5, 0.75, 0.5, mats.wood, -10.4, 0.4, -9.6), 'pottedPlant', 'height', 0.8);
+
+  decor(group, box(2.4, 0.5, 1.45, new THREE.MeshStandardMaterial({ color: 0xf2b8a0 }), 9.2, 0.28, -7.6), 'bedSingle', 'width', 2.4);
+  decor(group, box(0.5, 0.5, 0.5, mats.wood, 6.8, 0.28, -8.8), 'lampRoundTable', 'height', 0.5);
+  decor(group, box(0.5, 0.5, 0.5, mats.wood, 11.6, 0.28, -8.8), 'lampRoundTable', 'height', 0.5);
+  const pillow = decor(group, box(0.45, 0.18, 0.55, new THREE.MeshStandardMaterial({ color: 0xfff1e4 }), 8.6, 0.58, -7.6), 'pillow', 'height', 0.2);
+  pillow.userData.noCollide = true;
+  decor(group, box(1.2, 0.75, 0.7, mats.wood, 13.6, 0.4, -3.2), 'table', 'height', 0.75);
+  decor(group, box(0.5, 0.7, 0.5, mats.wood, 12.4, 0.38, -2.4), 'loungeChair', 'height', 0.7);
+  decor(group, box(0.6, 1.6, 0.9, mats.wood, 14.5, 0.82, -9.4), 'bookcaseOpen', 'height', 1.6);
+  const bedRug = box(3.4, 0.04, 2.2, new THREE.MeshStandardMaterial({ color: 0xd98b78 }), 9.2, 0.03, -5.6);
+  bedRug.userData.noCollide = true;
+  group.add(bedRug);
+
+  interactables.push({
+    id: 'guest-look-yellow',
+    label: 'להסתכל על הגינה מהחלון',
+    position: new THREE.Vector3(8.2, 0, 8.6),
+    radius: 2,
+    type: 'activity',
+    data: { action: 'visitMayaWindow' },
+  });
+  interactables.push({
+    id: 'guest-snack-yellow',
+    label: 'לבקש כיבוד קטן',
+    position: new THREE.Vector3(-6.2, 0, -5.2),
+    radius: 1.8,
+    type: 'activity',
+    data: { action: 'guestSnack' },
+  });
+}
+
 function buildHome(kind: 'player' | 'blue' | 'yellow'): ZoneBuildResult {
   const group = new THREE.Group();
   group.name = 'zone-home';
   const interactables: Interactable[] = [];
   const wallMat = kind === 'blue' ? mats.wallBlue : kind === 'yellow' ? mats.wallYellow : mats.wall;
-  const sofaColor = kind === 'blue' ? 0x3d6ea8 : kind === 'yellow' ? 0xd4a017 : 0x4a6fa5;
+  group.userData.homeKind = kind;
 
-  group.add(box(18, 0.2, 14, mats.floor, 0, -0.1, 0));
-  group.add(box(18, 3.5, 0.3, wallMat, 0, 1.75, -7));
-  group.add(box(8, 3.5, 0.3, wallMat, -5, 1.75, 7));
-  group.add(box(8, 3.5, 0.3, wallMat, 5, 1.75, 7));
-  group.add(box(0.3, 3.5, 14, wallMat, -9, 1.75, 0));
-  group.add(box(0.3, 3.5, 14, wallMat, 9, 1.75, 0));
-  // Five rooms: bedroom and kitchen at the back, kids' room, living room and bathroom in front.
+  group.add(box(32.4, 0.2, 24.4, mats.floor, 0, -0.1, 0));
+  addWall(group, wallMat, 'x', -12, -16, 16, []);
+  addWall(group, wallMat, 'x', 12, -16, 16, [{ at: 0, width: 2.5 }]);
+  addWall(group, wallMat, 'z', -16, -12, 12, []);
+  addWall(group, wallMat, 'z', 16, -12, 12, []);
+  if (kind === 'player') {
+  const sofaColor = 0x4a6fa5;
   const interior = new THREE.MeshStandardMaterial({ color: 0xf4efe4, roughness: 0.9 });
-  const crossZ = -0.7;
-  const kidsX = -3.45;
-  const bathX = 4.55;
-  const splitX = -0.9;
-  addWall(group, interior, 'x', crossZ, -8.85, 8.85, [
-    { at: -6.1, width: 1.6 },
-    { at: -2.25, width: 1.6 },
-    { at: 0.6, width: 1.85 },
-    { at: 6.6, width: 1.6 },
+  // Bedroom and kitchen behind, kids' room, living room and bathroom in front. Doorways are wide enough to walk through.
+  addWall(group, interior, 'x', -1, -15.8, 15.8, [
+    { at: -8, width: 2.3 },
+    { at: 6, width: 2.3 },
   ]);
-  addWall(group, interior, 'z', splitX, -6.85, -0.81, [{ at: -3.7, width: 1.6 }]);
-  addWall(group, interior, 'z', kidsX, -0.59, 6.7, [{ at: 2.3, width: 1.65 }]);
-  addWall(group, interior, 'z', bathX, -0.59, 6.7, [{ at: 2.3, width: 1.65 }]);
+  addWall(group, interior, 'z', -1, -11.8, -1.2, [{ at: -6.2, width: 2.2 }]);
+  addWall(group, interior, 'z', -6, -0.8, 11.8, [{ at: 5, width: 2.3 }]);
+  addWall(group, interior, 'z', 7, -0.8, 11.8, [{ at: 5, width: 2.3 }]);
 
-  roomFloor(group, 0xc9c3dc, -4.85, -3.75, 7.7, 5.7);
-  roomFloor(group, 0xd7e0da, 3.95, -3.75, 9.5, 5.7);
-  roomFloor(group, 0xf0d3a8, -6.15, 3.05, 5.2, 7.1);
-  roomFloor(group, 0xc5dce6, 6.7, 3.05, 4.1, 7.1);
 
-  roomWindow(group, -5.2, -6.68, 1.5, 'x');
-  roomWindow(group, 3.6, -6.68, 1.6, 'x');
-  roomWindow(group, -8.68, 3.6, 1.3, 'z');
-  roomWindow(group, 8.68, 4.4, 1.2, 'z');
-  roomWindow(group, 2.9, 6.68, 1.3, 'x');
+  roomFloor(group, 0xc9c3dc, -8.6, -6.5, 14.2, 10.2);
+  roomFloor(group, 0xd7e0da, 7.4, -6.5, 16.4, 10.2);
+  roomFloor(group, 0xf0d3a8, -11, 5.4, 9.4, 12.2);
+  roomFloor(group, 0xe7d7b8, 0.4, 5.4, 12.2, 12.2);
+  roomFloor(group, 0xc5dce6, 11.4, 5.4, 8.4, 12.2);
 
-  const sofa = box(2.5, 0.75, 1.05, new THREE.MeshStandardMaterial({ color: sofaColor }), -1.55, 0.4, 3.45);
+  roomWindow(group, -8, -11.82, 2.2, 'x');
+  roomWindow(group, 8, -11.82, 2.4, 'x');
+  roomWindow(group, -15.82, 6, 1.8, 'z');
+  roomWindow(group, 15.82, 7.2, 1.8, 'z');
+  roomWindow(group, -3.2, 11.82, 1.6, 'x');
+
+  const sofaMat = new THREE.MeshStandardMaterial({ color: sofaColor });
+  const sofa = decor(group, box(3.1, 0.8, 1.15, sofaMat, -2.2, 0.42, 6.4), 'loungeSofa', 'width', 3.1);
   sofa.name = 'furniture-sofa';
-  sofa.userData.dress = { prop: 'loungeSofa', fit: 'width', value: 2.5 };
-  group.add(sofa);
-  const coffee = box(1.15, 0.42, 0.7, mats.wood, 1.35, 0.24, 3.7);
-  coffee.userData.dress = { prop: 'tableCoffee', fit: 'width', value: 1.15 };
-  group.add(coffee);
-  const fridge = box(0.9, 1.7, 0.75, mats.metal, 7.15, 0.85, -6.15);
-  fridge.userData.dress = { prop: 'kitchenFridge', fit: 'height', value: 1.7 };
-  group.add(fridge);
-  const counter = box(1.55, 0.9, 0.62, mats.wood, 5.25, 0.45, -6.15);
-  counter.name = 'kitchen-counter';
-  group.add(counter);
-  const crate = box(1.45, 0.75, 0.9, mats.wood, 3.3, 0.4, -4.3);
-  crate.userData.dress = { prop: 'table', fit: 'height', value: 0.75 };
-  group.add(crate);
-  const bed = box(2.1, 0.5, 2.45, new THREE.MeshStandardMaterial({ color: 0x7aa2e3 }), -5.1, 0.28, -4.55);
-  bed.userData.dress = { prop: 'bedSingle', fit: 'width', value: 2.1 };
-  group.add(bed);
-  const night = box(0.5, 0.5, 0.5, mats.wood, -3.25, 0.28, -5.55);
-  night.userData.dress = { prop: 'lampRoundTable', fit: 'height', value: 0.5 };
-  group.add(night);
-  const desk = box(1.15, 0.7, 0.6, mats.wood, -6.35, 0.38, 2.15);
+  decor(group, box(1.4, 0.42, 0.8, mats.wood, 0.2, 0.24, 5.1), 'tableCoffee', 'width', 1.4);
+  decor(group, box(0.85, 0.8, 0.85, sofaMat, 2.5, 0.42, 5.1), 'loungeChair', 'width', 0.9);
+  decor(group, box(0.85, 0.8, 0.85, sofaMat, 2.5, 0.42, 7.5), 'loungeChair', 'width', 0.9);
+  const rug = decor(group, box(4.2, 0.04, 2.4, new THREE.MeshStandardMaterial({ color: 0xb85c38 }), -0.4, 0.03, 5.6), 'rugRectangle', 'width', 4.2);
+  rug.userData.noCollide = true;
+  decor(group, box(0.55, 0.35, 0.4, mats.metal, 4.2, 0.22, 8.8), 'radio', 'height', 0.42);
+  decor(group, box(0.7, 1.7, 0.7, mats.wood, -4.6, 0.88, 9.4), 'bookcaseOpen', 'height', 1.8);
+  decor(group, box(0.55, 0.7, 0.55, mats.wood, 4.6, 0.38, 2.4), 'pottedPlant', 'height', 0.85);
+  decor(group, box(0.45, 0.55, 0.45, mats.wood, -4.2, 0.3, 2.6), 'plantSmall1', 'height', 0.55);
+
+  decor(group, box(2.6, 0.55, 1.5, new THREE.MeshStandardMaterial({ color: 0x7aa2e3 }), -10, 0.3, -8.4), 'bedSingle', 'width', 2.6);
+  decor(group, box(0.55, 0.55, 0.55, mats.wood, -12.7, 0.3, -9.8), 'lampRoundTable', 'height', 0.55);
+  decor(group, box(0.55, 0.55, 0.55, mats.wood, -7.3, 0.3, -9.8), 'lampRoundTable', 'height', 0.55);
+  decor(group, box(0.7, 1.8, 1.3, mats.wood, -14.6, 0.92, -5.6), 'bookcaseOpen', 'height', 1.9);
+  decor(group, box(1.2, 0.7, 0.5, mats.wood, -14.5, 0.38, -8.8), 'sideTable', 'height', 0.7);
+  const bedRug = box(3.2, 0.04, 2.2, new THREE.MeshStandardMaterial({ color: 0x8e6aa8 }), -10, 0.03, -6.4);
+  bedRug.userData.noCollide = true;
+  group.add(bedRug);
+  decor(group, box(0.4, 0.18, 0.55, new THREE.MeshStandardMaterial({ color: 0xf2f4f8 }), -9.2, 0.62, -8.4), 'pillow', 'height', 0.22);
+
+  decor(group, box(1.05, 1.85, 0.8, mats.metal, 14.2, 0.95, -10.3), 'kitchenFridge', 'height', 1.85);
+  group.add(box(4.4, 0.95, 0.7, mats.wood, 10.2, 0.5, -10.5));
+  group.add(box(1.3, 0.9, 0.7, mats.metal, 6.6, 0.48, -10.5));
+  decor(group, box(1.7, 0.78, 1.05, mats.wood, 6.6, 0.42, -6.2), 'table', 'height', 0.78);
+  decor(group, box(0.55, 0.75, 0.55, mats.wood, 5.1, 0.4, -5.15), 'loungeChair', 'height', 0.8);
+  decor(group, box(0.55, 0.75, 0.55, mats.wood, 8.1, 0.4, -5.15), 'loungeChair', 'height', 0.8);
+  decor(group, box(0.55, 0.75, 0.55, mats.wood, 6.6, 0.4, -7.5), 'loungeChair', 'height', 0.8);
+  decor(group, box(0.55, 1.6, 0.9, mats.wood, 14.3, 0.82, -6.2), 'bookcaseOpen', 'height', 1.6);
+  const meal = box(0.35, 0.12, 0.35, mats.wood, 6.6, 0.88, -6.2);
+  meal.userData.noCollide = true;
+  meal.userData.dress = { prop: 'bowl-soup', fit: 'height', value: 0.16 };
+  group.add(meal);
+  decor(group, box(0.5, 0.7, 0.5, mats.wood, 2.4, 0.38, -10.2), 'pottedPlant', 'height', 0.7);
+
+  const desk = decor(group, box(1.3, 0.75, 0.7, mats.wood, -12.6, 0.4, 2.2), 'table', 'height', 0.75);
   desk.name = 'kids-desk';
-  group.add(desk);
-  const tub = box(1.35, 0.48, 0.62, new THREE.MeshStandardMaterial({ color: 0xf7f8fb, roughness: 0.35 }), 6.65, 0.28, 5.55);
-  tub.name = 'bath-tub';
-  group.add(tub);
-  const washer = box(0.7, 0.9, 0.62, mats.metal, 8.15, 0.48, 4.55);
-  washer.name = 'washer';
-  group.add(washer);
-  const sink = box(0.55, 0.72, 0.42, new THREE.MeshStandardMaterial({ color: 0xf4f7fb, roughness: 0.4 }), 6.55, 0.4, 1.35);
-  sink.name = 'sink';
-  group.add(sink);
+  decor(group, box(0.5, 0.7, 0.5, mats.wood, -12.6, 0.38, 3.3), 'loungeChair', 'height', 0.75);
+  decor(group, box(0.55, 1.7, 1.2, mats.wood, -14.8, 0.88, 6.2), 'bookcaseOpen', 'height', 1.7);
+  const kidsRug = box(3.4, 0.04, 2.4, new THREE.MeshStandardMaterial({ color: 0x3d9b8f }), -11, 0.03, 7.1);
+  kidsRug.userData.noCollide = true;
+  group.add(kidsRug);
+  group.add(box(0.9, 0.45, 0.7, mats.wood, -14.2, 0.26, 8.6));
+  decor(group, box(1.5, 0.4, 0.9, new THREE.MeshStandardMaterial({ color: 0xf0d3a8 }), -8.8, 0.22, 9.2), 'pillowBlue', 'width', 0.7);
+  const blocks = box(0.28, 0.28, 0.28, mats.play, -11.4, 0.16, 6.6);
+  blocks.userData.noCollide = true;
+  group.add(blocks);
+
+  group.add(box(1.7, 0.55, 0.75, new THREE.MeshStandardMaterial({ color: 0xf7f8fb, roughness: 0.35 }), 12.6, 0.3, 9.3));
+  group.add(box(0.7, 0.8, 0.5, new THREE.MeshStandardMaterial({ color: 0xf4f7fb, roughness: 0.4 }), 9.3, 0.42, 9.5));
+  group.add(box(0.8, 0.95, 0.7, mats.metal, 14.4, 0.5, 6.2));
+  decor(group, box(0.45, 1.3, 0.4, mats.wood, 14.6, 0.68, 3.3), 'bookcaseOpen', 'height', 1.3);
+  const mirror = box(0.7, 0.9, 0.06, mats.glass, 9.3, 1.7, 10.4);
+  mirror.userData.noCollide = true;
+  group.add(mirror);
+
   interactables.push({
     id: `sit-sofa-${kind}`,
     label: 'לשבת על הספה',
-    position: new THREE.Vector3(-1.55, 0, 2.55),
-    radius: 1.55,
+    position: new THREE.Vector3(-2.2, 0, 5.1),
+    radius: 1.8,
     type: 'activity',
     data: { action: 'sitSofa' },
   });
-
-  const seat = box(0.7, 0.75, 0.7, new THREE.MeshStandardMaterial({ color: 0xe07a5f }), 2.7, 0.4, 2.35);
-  seat.userData.dress = { prop: 'loungeChair', fit: 'width', value: 0.75 };
-  group.add(seat);
-
-  const rug = box(2.6, 0.04, 1.7, new THREE.MeshStandardMaterial({ color: 0xb85c38 }), -1.55, 0.03, 2.15);
-  rug.userData.noCollide = true;
-  rug.userData.dress = { prop: 'rugRectangle', fit: 'width', value: 2.6 };
-  group.add(rug);
-  const kidsRug = box(2.2, 0.04, 1.6, new THREE.MeshStandardMaterial({ color: 0x3d9b8f }), -6.1, 0.03, 3.7);
-  kidsRug.userData.noCollide = true;
-  group.add(kidsRug);
-  const shelf = box(0.4, 1.55, 1.15, mats.wood, 8.2, 0.8, 2.7);
-  shelf.userData.dress = { prop: 'bookcaseOpen', fit: 'height', value: 1.55 };
-  group.add(shelf);
-
-  const radio = box(0.5, 0.32, 0.35, mats.metal, 2.55, 0.2, 4.85);
-  radio.userData.dress = { prop: 'radio', fit: 'height', value: 0.38 };
-  group.add(radio);
   interactables.push({
     id: `radio-${kind}`,
     label: 'להדליק/לכבות מוזיקה',
-    position: new THREE.Vector3(2.2, 0, 4.4),
-    radius: 1.25,
+    position: new THREE.Vector3(3.6, 0, 8.2),
+    radius: 1.5,
     type: 'activity',
     data: { action: 'toggleMusic' },
   });
+  interactables.push({
+    id: `meal-${kind}`,
+    label: 'לשבת לארוחה משפחתית',
+    position: new THREE.Vector3(6.6, 0, -4.6),
+    radius: 1.8,
+    type: 'activity',
+    data: { action: 'playScene', scene: 'family-meal', task: 'eat' },
+  });
+  interactables.push({
+    id: `story-${kind}`,
+    label: 'סיפור לפני השינה',
+    position: new THREE.Vector3(-10, 0, -6.2),
+    radius: 1.8,
+    type: 'activity',
+    data: { action: 'playScene', scene: 'bedtime', task: 'rest' },
+  });
+  interactables.push({
+    id: `game-night-${kind}`,
+    label: 'ערב משחקים בסלון',
+    position: new THREE.Vector3(0.2, 0, 4.2),
+    radius: 1.8,
+    type: 'activity',
+    data: { action: 'playScene', scene: 'game-night', task: 'playBall' },
+  });
+  interactables.push({
+    id: `build-${kind}`,
+    label: 'לבנות עם האח על השטיח',
+    position: new THREE.Vector3(-11, 0, 6.4),
+    radius: 1.8,
+    type: 'activity',
+    data: { action: 'playScene', scene: 'build-together', task: 'playBlocks' },
+  });
 
-  if (kind === 'player') {
-    const album = box(1.3, 0.9, 0.06, mats.wood, -8.62, 1.55, -3.4);
+    const album = box(1.5, 1, 0.06, mats.wood, -4.4, 1.7, -0.82);
     album.userData.noCollide = true;
     group.add(album);
     interactables.push({
       id: 'album',
       label: 'לפתוח אלבום הצלחות',
-      position: new THREE.Vector3(-7.7, 0, -3.4),
+      position: new THREE.Vector3(-4.4, 0, -1.6),
       radius: 1.5,
       type: 'album',
     });
-
     for (let i = 0; i < 5; i++) {
-      const toy = box(0.32, 0.32, 0.32, mats.play, -7.3 + (i % 3) * 0.45, 0.18, 4.3 + Math.floor(i / 3) * 0.45);
+      const toy = box(0.32, 0.32, 0.32, mats.play, -12.2 + (i % 3) * 0.5, 0.18, 7.6 + Math.floor(i / 3) * 0.5);
       toy.name = `mess-toy-${i}`;
       toy.visible = false;
       group.add(toy);
     }
-
     const furniture = [
-      { id: 'plant-pot', label: 'להזיז עציץ', x: 3.25, z: 0.95 },
-      { id: 'chair', label: 'להזיז כיסא', x: 4.35, z: -3.35 },
-      { id: 'toybox', label: 'להזיז ארגז צעצועים', x: -7.15, z: 4.75 },
+      { id: 'plant-pot', label: 'להזיז עציץ', x: 3.3, z: 2.5 },
+      { id: 'chair', label: 'להזיז כיסא', x: 4.4, z: -4.5 },
+      { id: 'toybox', label: 'להזיז ארגז צעצועים', x: -13.4, z: 8.8 },
     ];
-    for (const f of furniture) {
-      const mesh = box(0.7, 0.7, 0.7, mats.wood, f.x, 0.35, f.z);
-      mesh.name = f.id;
-      if (f.id === 'plant-pot') mesh.userData.dress = { prop: 'pottedPlant', fit: 'height', value: 0.6 };
-      if (f.id === 'chair') mesh.userData.dress = { prop: 'loungeChair', fit: 'height', value: 0.8 };
+    for (const item of furniture) {
+      const mesh = box(0.7, 0.7, 0.7, mats.wood, item.x, 0.35, item.z);
+      mesh.name = item.id;
+      if (item.id === 'plant-pot') mesh.userData.dress = { prop: 'pottedPlant', fit: 'height', value: 0.7 };
+      if (item.id === 'chair') mesh.userData.dress = { prop: 'loungeChair', fit: 'height', value: 0.85 };
       group.add(mesh);
       interactables.push({
-        id: f.id,
-        label: f.label,
-        position: new THREE.Vector3(f.x, 0, f.z),
+        id: item.id,
+        label: item.label,
+        position: new THREE.Vector3(item.x, 0, item.z),
         radius: 1.6,
         type: 'furniture',
         mesh,
         data: { movable: true },
       });
     }
-
-    const cup = cyl(0.12, 0.22, mats.glass, 3.55, 0.9, -4.15);
+    const cup = cyl(0.12, 0.22, mats.glass, 7.2, 0.95, -6.2);
     cup.userData.noCollide = true;
     group.add(cup);
     interactables.push({
       id: 'spill-cup',
       label: 'לגעת בכוס על השולחן',
-      position: new THREE.Vector3(2.3, 0, -3.6),
+      position: new THREE.Vector3(7.2, 0, -5.4),
       radius: 1.4,
       type: 'activity',
       data: { situation: 'spilled_drink' },
     });
-
     interactables.push({
       id: 'lie-bed',
       label: 'לשכב על המיטה',
-      position: new THREE.Vector3(-3.7, 0, -3.15),
-      radius: 1.45,
+      position: new THREE.Vector3(-10, 0, -6.5),
+      radius: 1.6,
       type: 'activity',
       data: { action: 'lieBed' },
     });
-
     interactables.push({
       id: 'fridge',
       label: 'לאכול משהו מהמקרר',
-      position: new THREE.Vector3(6.3, 0, -5.15),
-      radius: 1.45,
+      position: new THREE.Vector3(13.2, 0, -9.2),
+      radius: 1.6,
       type: 'activity',
       data: { action: 'eat' },
     });
+  } else if (kind === 'blue') {
+    furnishBlue(group, interactables);
   } else {
-    interactables.push({
-      id: `guest-look-${kind}`,
-      label: kind === 'blue' ? 'להסתכל על החדר של נועם' : 'להסתכל על הגינה מהחלון',
-      position: new THREE.Vector3(-1.4, 0, 2.2),
-      radius: 2,
-      type: 'activity',
-      data: { action: kind === 'blue' ? 'visitNoamRoom' : 'visitMayaWindow' },
-    });
-    interactables.push({
-      id: `guest-snack-${kind}`,
-      label: 'לבקש כיבוד קטן',
-      position: new THREE.Vector3(3.3, 0, -3.2),
-      radius: 1.8,
-      type: 'activity',
-      data: { action: 'guestSnack' },
-    });
+    furnishYellow(group, interactables);
   }
 
   interactables.push({
     id: `exit-home-${kind}`,
     label: 'לצאת מהדלת לשכונה',
-    position: new THREE.Vector3(0, 0, 5.2),
-    radius: 2.3,
+    position: new THREE.Vector3(0, 0, 10.2),
+    radius: 2.2,
     type: 'door',
     data: { target: 'neighborhood' },
   });
-  const door = box(1.5, 2.35, 0.16, mats.door, 0, 1.18, 6.62);
+  const door = box(1.6, 2.6, 0.16, mats.door, 0, 1.3, 11.72);
   door.name = 'home-door';
   group.add(door);
-  group.add(box(0.14, 2.55, 0.22, mats.wood, -0.86, 1.28, 6.62));
-  group.add(box(0.14, 2.55, 0.22, mats.wood, 0.86, 1.28, 6.62));
-  group.add(box(1.9, 0.16, 0.22, mats.wood, 0, 2.5, 6.62));
-  group.add(box(0.08, 0.08, 0.1, mats.metal, 0.48, 1.15, 6.5));
+  group.add(box(0.16, 3.3, 0.24, mats.wood, -1.35, 1.65, 11.72));
+  group.add(box(0.16, 3.3, 0.24, mats.wood, 1.35, 1.65, 11.72));
+  group.add(box(0.08, 0.08, 0.1, mats.metal, 0.55, 1.2, 11.6));
+
+  const homeZone: ZoneId = kind === 'player' ? 'home' : kind === 'blue' ? 'home_blue' : 'home_yellow';
+  addEncounters(homeZone, group, interactables);
 
   const npcSpawns =
     kind === 'player'
       ? [
-          { id: 'mom', position: new THREE.Vector3(4.4, 0, -2.7) },
-          { id: 'dad', position: new THREE.Vector3(1.65, 0, 1.45) },
-          { id: 'brother', position: new THREE.Vector3(-5.5, 0, 3.3) },
+          { id: 'mom', position: new THREE.Vector3(9.4, 0, -7.6) },
+          { id: 'dad', position: new THREE.Vector3(1.6, 0, 7.4) },
+          { id: 'brother', position: new THREE.Vector3(-10.6, 0, 6.6) },
         ]
       : kind === 'blue'
         ? [
-            { id: 'noam', position: new THREE.Vector3(-5.6, 0, 3.1) },
-            { id: 'dad', position: new THREE.Vector3(4.2, 0, -2.8) },
+            { id: 'noam', position: new THREE.Vector3(-8, 0, 1.8) },
+            { id: 'dad', position: new THREE.Vector3(4.2, 0, 3.2) },
           ]
         : [
-            { id: 'maya', position: new THREE.Vector3(-5.7, 0, 2.8) },
-            { id: 'neighbor', position: new THREE.Vector3(1.4, 0, 1.8) },
+            { id: 'maya', position: new THREE.Vector3(10.6, 0, -4) },
+            { id: 'neighbor', position: new THREE.Vector3(2.4, 0, 5.2) },
           ];
 
   return {
     group,
     interactables,
-    spawn: new THREE.Vector3(0.4, 0, 0.45),
+    spawn: new THREE.Vector3(0.2, 0, 3.2),
     npcSpawns,
   };
 }
@@ -722,43 +920,30 @@ function buildSchool(): ZoneBuildResult {
   group.add(box(0.22, 2.7, 0.22, mats.wood, 0.6, 1.35, -0.2));
   group.add(box(17.4, 0.16, 0.22, mats.wood, -8, 2.7, -0.2));
   group.add(box(0.22, wallH, 6.2, mats.wall, -8, wallH / 2, -8.8));
-  group.add(box(2.2, 2.5, 0.12, new THREE.MeshStandardMaterial({ color: 0x2f6b4f }), -12.2, 1.7, -11.9));
-  group.add(box(2.2, 2.5, 0.12, new THREE.MeshStandardMaterial({ color: 0x245c8a }), -3.6, 1.7, -11.9));
+  for (const teacher of TEACHERS) {
+    const color = teacher.id === 'teacher' ? 0x2f6b4f : 0x245c8a;
+    group.add(box(2.2, 2.5, 0.12, new THREE.MeshStandardMaterial({ color }), teacher.x, 1.7, -11.9));
+  }
   // Yard
-  group.add(box(18, 0.15, 14, mats.grass, 8, 0.02, 4));
-  group.add(box(1.2, 0.3, 1.2, mats.play, 6, 0.3, 2));
+  group.add(box(24, 0.15, 18, mats.grass, 12, 0.02, 5));
+  group.add(box(1.2, 0.3, 1.2, mats.play, 3.2, 0.3, 1.2));
   group.add(cyl(0.8, 0.2, mats.sand, 10, 0.15, 6));
 
-  for (const roomX of [-12.2, -3.8]) {
-    for (let row = 0; row < 2; row++) {
-      for (let col = 0; col < 2; col++) {
-        const dx = roomX + (col - 0.5) * 1.8;
-        const dz = -8.6 + row * 1.7;
-        const desk = box(1.15, 0.7, 0.7, mats.wood, dx, 0.35, dz);
-        desk.userData.dress = { prop: 'table', fit: 'height', value: 0.72 };
-        desk.userData.noCollide = false;
-        group.add(desk);
-        group.add(box(0.42, 0.42, 0.42, mats.play, dx, 0.22, dz + 0.55));
-      }
-    }
+  for (const seat of SCHOOL_SEATS) {
+    const desk = box(1.15, 0.7, 0.7, mats.wood, seat.x, 0.35, seat.deskZ);
+    desk.userData.dress = { prop: 'table', fit: 'height', value: 0.72 };
+    group.add(desk);
+    group.add(box(0.42, 0.42, 0.42, mats.play, seat.x, 0.22, seat.deskZ + 0.52));
+    if (!seat.forPlayer) continue;
+    interactables.push({
+      id: `sit-${seat.id}`,
+      label: 'לשבת ליד השולחן',
+      position: new THREE.Vector3(seat.sitX, 0, seat.sitZ + 0.8),
+      radius: 1.15,
+      type: 'activity',
+      data: { action: 'sitDesk', x: seat.sitX, z: seat.sitZ, standZ: seat.sitZ + 0.85, yaw: seat.yaw },
+    });
   }
-
-  interactables.push({
-    id: 'sit-desk-left',
-    label: 'לשבת ליד השולחן',
-    position: new THREE.Vector3(-13.1, 0, -7.35),
-    radius: 1.35,
-    type: 'activity',
-    data: { action: 'sitDesk', x: -13.1, z: -8.05, standZ: -7.2, yaw: Math.PI },
-  });
-  interactables.push({
-    id: 'sit-desk-right',
-    label: 'לשבת ליד השולחן',
-    position: new THREE.Vector3(-4.7, 0, -7.35),
-    radius: 1.35,
-    type: 'activity',
-    data: { action: 'sitDesk', x: -4.7, z: -8.05, standZ: -7.2, yaw: Math.PI },
-  });
   interactables.push({
     id: 'classroom',
     label: 'להיכנס לשיעור',
@@ -770,7 +955,7 @@ function buildSchool(): ZoneBuildResult {
   interactables.push({
     id: 'tag-game',
     label: 'משחקי חצר בהפסקה',
-    position: new THREE.Vector3(8, 0, 4),
+    position: new THREE.Vector3(12, 0, 6),
     radius: 3,
     type: 'activity',
     data: { action: 'recessTag' },
@@ -800,17 +985,13 @@ function buildSchool(): ZoneBuildResult {
     type: 'door',
     data: { target: 'neighborhood' },
   });
+  addEncounters('school', group, interactables);
 
   return {
     group,
     interactables,
     spawn: new THREE.Vector3(-8, 0, 4),
-    npcSpawns: [
-      { id: 'teacher', position: new THREE.Vector3(-12.4, 0, -10.4) },
-      { id: 'noam', position: new THREE.Vector3(7, 0, 3) },
-      { id: 'maya', position: new THREE.Vector3(9, 0, 5) },
-      { id: 'dani', position: new THREE.Vector3(5, 0, 6) },
-    ],
+    npcSpawns: schoolSpawns(),
   };
 }
 
@@ -873,6 +1054,7 @@ function buildShop(): ZoneBuildResult {
     type: 'door',
     data: { target: 'neighborhood' },
   });
+  addEncounters('shop', group, interactables);
 
   return {
     group,
@@ -880,62 +1062,6 @@ function buildShop(): ZoneBuildResult {
     spawn: new THREE.Vector3(0, 0, 1.2),
     npcSpawns: [{ id: 'shopkeeper', position: new THREE.Vector3(1.7, 0, 3.5) }],
   };
-}
-
-function addPlayground(group: THREE.Group, ox: number, oz: number): void {
-  const red = new THREE.MeshStandardMaterial({ color: 0xd64545, roughness: 0.55 });
-  const yellow = new THREE.MeshStandardMaterial({ color: 0xf2c14e, roughness: 0.55 });
-  const blue = new THREE.MeshStandardMaterial({ color: 0x3d7ec9, roughness: 0.55 });
-  const green = new THREE.MeshStandardMaterial({ color: 0x3c9a5a, roughness: 0.55 });
-  const place = (mesh: THREE.Object3D, x: number, z: number) => {
-    mesh.position.x += ox + x;
-    mesh.position.z += oz + z;
-    group.add(mesh);
-  };
-  const post = (x: number, z: number) => place(box(0.14, 2.5, 0.14, blue, 0, 1.25, 0), x, z);
-  post(-1.35, -0.85);
-  post(1.35, -0.85);
-  post(-1.35, 0.85);
-  post(1.35, 0.85);
-  place(box(2.9, 0.12, 0.12, blue, 0, 2.45, 0), 0, -0.85);
-  place(box(2.9, 0.12, 0.12, blue, 0, 2.45, 0), 0, 0.85);
-  place(box(0.12, 0.12, 1.85, blue, 0, 2.45, 0), -1.35, 0);
-  place(box(0.12, 0.12, 1.85, blue, 0, 2.45, 0), 1.35, 0);
-  for (const sx of [-0.5, 0.5]) {
-    place(box(0.05, 1.35, 0.05, mats.metal, 0, 1.7, 0), sx, 0);
-    place(box(0.62, 0.08, 0.32, red, 0, 0.98, 0), sx, 0);
-  }
-
-  place(box(1.05, 1.35, 1.05, yellow, 0, 0.68, 0), 3.3, -0.4);
-  const chute = box(0.95, 0.12, 2.5, red, 0, 1.15, 0);
-  chute.rotation.x = -0.5;
-  place(chute, 3.3, 1.35);
-  place(box(0.08, 1.25, 0.08, yellow, 0, 0.62, 0), 2.9, -1.15);
-  place(box(0.08, 1.25, 0.08, yellow, 0, 0.62, 0), 3.7, -1.15);
-  for (const hy of [0.35, 0.7, 1.05]) place(box(0.85, 0.07, 0.1, yellow, 0, hy, 0), 3.3, -1.15);
-
-  const plank = box(0.42, 0.1, 2.6, green, 0, 0.62, 0);
-  plank.rotation.z = 0.22;
-  place(plank, 5.7, 0);
-  place(cyl(0.22, 0.45, blue, 0, 0.28, 0), 5.7, 0);
-  place(box(0.4, 0.08, 0.4, red, 0, 0.78, 0), 5.7, -1.15);
-  place(box(0.4, 0.08, 0.4, yellow, 0, 0.46, 0), 5.7, 1.15);
-
-  place(box(2.4, 0.22, 1.8, mats.wood, 0, 0.11, 0), 3.2, -3.1);
-  place(box(2, 0.1, 1.4, mats.sand, 0, 0.22, 0), 3.2, -3.1);
-
-  for (const [cx, cz] of [
-    [-1.15, -3.5],
-    [0.9, -3.5],
-    [-1.15, -2.1],
-    [0.9, -2.1],
-  ] as Array<[number, number]>) {
-    place(box(0.12, 1.55, 0.12, green, 0, 0.78, 0), cx, cz);
-  }
-  place(box(2.2, 0.1, 0.1, green, 0, 1.5, 0), -0.1, -3.5);
-  place(box(2.2, 0.1, 0.1, green, 0, 1.5, 0), -0.1, -2.1);
-  place(box(0.1, 0.1, 1.55, green, 0, 1.5, 0), -1.15, -2.8);
-  place(box(0.1, 0.1, 1.55, green, 0, 1.5, 0), 0.9, -2.8);
 }
 
 function buildPark(): ZoneBuildResult {
@@ -958,48 +1084,17 @@ function buildPark(): ZoneBuildResult {
   group.add(bench(-4, 4));
   group.add(bench(4, -3, Math.PI / 2));
 
-  addPlayground(group, 10, -1);
-
-  interactables.push({
-    id: 'swing',
-    label: 'לשבת על הנדנדה',
-    position: new THREE.Vector3(10.5, 0, -1),
-    radius: 1.5,
-    type: 'activity',
-    data: { action: 'swing' },
-  });
-  interactables.push({
-    id: 'slide',
-    label: 'לרדת במגלשה',
-    position: new THREE.Vector3(13.3, 0, -2.3),
-    radius: 1.55,
-    type: 'activity',
-    data: { action: 'slide' },
-  });
-  interactables.push({
-    id: 'seesaw',
-    label: 'לשבת על נדנדת האיזון',
-    position: new THREE.Vector3(15.7, 0, -2.15),
-    radius: 1.5,
-    type: 'activity',
-    data: { action: 'seesaw' },
-  });
-  interactables.push({
-    id: 'climb',
-    label: 'לטפס על המתקן',
-    position: new THREE.Vector3(9.9, 0, -3.8),
-    radius: 1.55,
-    type: 'activity',
-    data: { action: 'climb' },
-  });
-  interactables.push({
-    id: 'sandbox',
-    label: 'לשחק בארגז החול',
-    position: new THREE.Vector3(13.2, 0, -4.1),
-    radius: 1.55,
-    type: 'activity',
-    data: { action: 'sandbox' },
-  });
+  buildPlayground(group);
+  for (const spot of playgroundSpots()) {
+    interactables.push({
+      id: `ride-${spot.id}-${spot.slot}`,
+      label: spot.label,
+      position: new THREE.Vector3(spot.x, 0, spot.z),
+      radius: 1.65,
+      type: 'activity',
+      data: { action: 'ride', ride: spot.id, slot: spot.slot },
+    });
+  }
   interactables.push({
     id: 'park-argue',
     label: 'לגשת למשחק הכדור',
@@ -1045,6 +1140,7 @@ function buildPark(): ZoneBuildResult {
     type: 'door',
     data: { target: 'neighborhood' },
   });
+  addEncounters('park', group, interactables);
 
   return {
     group,
@@ -1165,6 +1261,83 @@ function zooGear(group: THREE.Group, gear: ZooPen['gear'], x: number, z: number)
   group.add(box(1.15, 0.72, 0.95, mats.wood, x, 0.36, z));
   soft(box(1.3, 0.12, 1.1, mats.roof, x, 0.78, z));
   soft(box(0.42, 0.42, 0.06, zooDen, x, 0.26, z + 0.48));
+}
+
+function buildLuna(): ZoneBuildResult {
+  const group = new THREE.Group();
+  group.name = 'zone-luna';
+  const interactables: Interactable[] = [];
+
+  group.add(box(68, 0.2, 58, mats.grass, 0, -0.1, 2));
+  for (const [x, z] of [
+    [-30, 18],
+    [30, 18],
+    [-30, -18],
+    [30, -18],
+    [0, -20],
+  ]) {
+    group.add(tree(x, z));
+  }
+  group.add(bench(8, 14));
+  group.add(bench(-8, 14, Math.PI));
+
+  buildLunaPark(group);
+  for (const spot of lunaSpots()) {
+    interactables.push({
+      id: `ride-${spot.id}-${spot.slot}`,
+      label: spot.label,
+      position: new THREE.Vector3(spot.x, 0, spot.z),
+      radius: 1.05,
+      type: 'activity',
+      data: { action: 'ride', ride: spot.id, slot: spot.slot },
+    });
+  }
+  for (const line of lunaQueues()) {
+    interactables.push({
+      id: `queue-${line.id}`,
+      label: line.label,
+      position: new THREE.Vector3(line.x, 0, line.z),
+      radius: 2.2,
+      type: 'activity',
+      data: { action: 'queue', ride: line.id },
+    });
+  }
+  interactables.push({
+    id: 'luna-ticket',
+    label: `לקנות כרטיס למתקן — ${RIDE_TICKET_PRICE}₪`,
+    position: new THREE.Vector3(-6.2, 0, 17.3),
+    radius: 2.4,
+    type: 'activity',
+    data: { action: 'buyTicket' },
+  });
+  interactables.push({
+    id: 'luna-snacks',
+    label: 'לקנות בדוכן החטיפים',
+    position: new THREE.Vector3(6.2, 0, 17.3),
+    radius: 2.4,
+    type: 'activity',
+    data: { action: 'fairSnacks' },
+  });
+  interactables.push({
+    id: 'exit-luna',
+    label: 'לחזור לשכונה',
+    position: new THREE.Vector3(0, 0, 23.2),
+    radius: 2.4,
+    type: 'door',
+    data: { target: 'neighborhood' },
+  });
+  addEncounters('luna', group, interactables);
+
+  return {
+    group,
+    interactables,
+    spawn: new THREE.Vector3(0, 0, 20),
+    npcSpawns: [
+      { id: 'dani', position: new THREE.Vector3(-2, 0, 15) },
+      { id: 'noam', position: new THREE.Vector3(2, 0, 14) },
+      { id: 'maya', position: new THREE.Vector3(-6, 0, 12) },
+    ],
+  };
 }
 
 function buildZoo(): ZoneBuildResult {
@@ -1312,6 +1485,7 @@ function buildZoo(): ZoneBuildResult {
     type: 'door',
     data: { target: 'neighborhood' },
   });
+  addEncounters('zoo', group, interactables);
 
   return {
     group,

@@ -29,8 +29,6 @@ export async function loadGlb(url: string, scale = 1): Promise<THREE.Group | nul
         standard.roughness = Math.max(standard.roughness, 0.72);
       }
     });
-    const characterId = url.match(/\/characters\/([^/]+)\.glb/i)?.[1];
-    if (characterId) presentCharacter(root, characterId);
     cache.set(url, root as THREE.Group);
     animCache.set(url, gltf.animations ?? []);
     return cloneSkinned(root) as THREE.Group;
@@ -43,8 +41,19 @@ export function getCachedClips(url: string): THREE.AnimationClip[] {
   return animCache.get(url) ?? [];
 }
 
+/** Extra people reuse a body file, then get their own face colors and clothes. */
+const BODY: Record<string, string> = {
+  lior: 'noam',
+  shira: 'maya',
+  eitan: 'dani',
+  hila: 'tala',
+  aviv: 'roni',
+  rut: 'sister',
+  teacher_david: 'shopkeeper',
+};
+
 export function characterUrl(id: string): string {
-  return `/assets/models/characters/${id}.glb`;
+  return `/assets/models/characters/${BODY[id] ?? id}.glb`;
 }
 
 /** Preload common character models; ignore failures. */
@@ -65,8 +74,16 @@ export function cloneCached(url: string): THREE.Group | null {
 export function takeCharacterModel(id: string): { mesh: THREE.Group; clips: THREE.AnimationClip[] } | null {
   const url = characterUrl(id);
   if (!cache.has(url)) return null;
-  return {
-    mesh: cloneSkinned(cache.get(url)!) as THREE.Group,
-    clips: getCachedClips(url),
-  };
+  const mesh = cloneSkinned(cache.get(url)!) as THREE.Group;
+  cloneMaterials(mesh);
+  presentCharacter(mesh, id);
+  return { mesh, clips: getCachedClips(url) };
+}
+
+function cloneMaterials(root: THREE.Object3D): void {
+  root.traverse((obj) => {
+    const mesh = obj as THREE.Mesh;
+    if (!mesh.isMesh) return;
+    mesh.material = Array.isArray(mesh.material) ? mesh.material.map((material) => material.clone()) : mesh.material.clone();
+  });
 }

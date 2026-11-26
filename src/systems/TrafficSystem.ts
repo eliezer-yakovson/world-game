@@ -44,12 +44,8 @@ export class TrafficSystem {
     return this.group;
   }
 
-  getObstacles(): Array<{ x: number; z: number; radius: number }> {
-    return this.vehicles.map((car) => ({
-      x: car.mesh.position.x,
-      z: car.mesh.position.z,
-      radius: car.isBus ? 1.7 : 1.15,
-    }));
+  forEachObstacle(visit: (x: number, z: number, radius: number) => void): void {
+    for (const car of this.vehicles) visit(car.pos.x, car.pos.z, car.isBus ? 1.7 : 1.15);
   }
 
   clear(): void {

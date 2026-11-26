@@ -16,6 +16,12 @@ export class PlayerController {
   private yaw = 0;
   cameraDistance = 10;
   cameraHeight = 6;
+  /** 1 is the zone's usual framing. Smaller brings the world closer. */
+  private zoom = 1;
+  /** Added to the zone's camera angle. Dragging up and down changes it. */
+  private pitchOffset = 0;
+  private readonly camOffset = new THREE.Vector3();
+  private readonly camDesired = new THREE.Vector3();
   topDown = false;
   private sensitivity = 1;
   private mixer?: THREE.AnimationMixer;
@@ -27,7 +33,21 @@ export class PlayerController {
   /** While set, the player stays on a chosen chore instead of walking. */
   taskHold = false;
   private heldKey = '';
+  private pin: {
+    x: number;
+    y: number;
+    z: number;
+    yaw: number;
+    pitch: number;
+    roll: number;
+    emote: string;
+    loop: boolean;
+  } | null = null;
   private fallbackColor = 0x3d9b8f;
+  private readonly aimForward = new THREE.Vector3();
+  private readonly aimRight = new THREE.Vector3();
+  private readonly wish = new THREE.Vector3();
+  private readonly stepPos = new THREE.Vector3();
   private pose: {
     origin: THREE.Vector3;
     target: THREE.Vector3 | null;
@@ -166,8 +186,49 @@ export class PlayerController {
     return this.yaw;
   }
 
+  /** Drag orbit. Horizontal motion turns a full circle; vertical motion tilts. */
+  orbit(dx: number, dy: number): void {
+    const sens = 0.008 * this.sensitivity;
+    this.yaw -= dx * sens;
+    this.pitchOffset = THREE.MathUtils.clamp(this.pitchOffset + dy * sens * 0.85, -0.42, 0.82);
+  }
+
+  /** Wheel zoom. Positive deltaY moves the camera farther away. */
+  zoomBy(deltaY: number): void {
+    this.zoom = THREE.MathUtils.clamp(this.zoom * Math.exp(deltaY * 0.0011), 0.38, 2.8);
+  }
+
   get posing(): boolean {
     return this.pose !== null;
+  }
+
+  get pinned(): boolean {
+    return this.pin !== null;
+  }
+
+  /** Hold the player on a playground motion. Applied at the start of update. */
+  setPin(pose: {
+    x: number;
+    y: number;
+    z: number;
+    yaw: number;
+    pitch: number;
+    roll: number;
+    emote: string;
+    loop: boolean;
+  }): void {
+    this.pin = pose;
+  }
+
+  clearPin(): void {
+    if (!this.pin) return;
+    this.pin = null;
+    this.heldKey = '';
+    this.position.y = 0;
+    this.mesh.rotation.order = 'YXZ';
+    this.mesh.rotation.x = 0;
+    this.mesh.rotation.z = 0;
+    this.playIdle();
   }
 
   startPose(options: {
@@ -261,6 +322,17 @@ export class PlayerController {
     blocked = false,
     resolve?: (next: THREE.Vector3, radius: number) => THREE.Vector3,
   ): void {
+    if (this.pin) {
+      const pin = this.pin;
+      this.position.set(pin.x, pin.y, pin.z);
+      this.mesh.rotation.order = 'YXZ';
+      this.mesh.rotation.set(pin.pitch, pin.yaw, pin.roll);
+      this.playHeldClip(pin.emote, pin.loop);
+      this.mixer?.update(dt);
+      this.frameCamera(dt, camera);
+      return;
+    }
+
     if (this.pose) {
       const pose = this.pose;
       pose.t += dt;
@@ -279,14 +351,15 @@ export class PlayerController {
       if (!blocked) {
         if (this.keys.has('KeyQ')) this.yaw += dt * 1.5 * this.sensitivity;
         if (this.keys.has('KeyR')) this.yaw -= dt * 1.5 * this.sensitivity;
-        this.frameCamera(dt, camera);
       }
       this.mixer?.update(dt);
+      this.frameCamera(dt, camera);
       return;
     }
 
     if (blocked) {
       this.mixer?.update(dt);
+      this.frameCamera(dt, camera);
       return;
     }
 
@@ -304,25 +377,25 @@ export class PlayerController {
     if (this.hasBike) moveSpeed *= 1.8;
     else if (this.hasScooter) moveSpeed *= 1.5;
 
-    const forward = new THREE.Vector3(-Math.sin(this.yaw), 0, -Math.cos(this.yaw));
-    const right = new THREE.Vector3(Math.cos(this.yaw), 0, -Math.sin(this.yaw));
-    const move = new THREE.Vector3();
-    move.addScaledVector(forward, -inputZ);
-    move.addScaledVector(right, inputX);
-    this.moving = move.lengthSq() > 0;
+    this.aimForward.set(-Math.sin(this.yaw), 0, -Math.cos(this.yaw));
+    this.aimRight.set(Math.cos(this.yaw), 0, -Math.sin(this.yaw));
+    this.wish.set(0, 0, 0);
+    this.wish.addScaledVector(this.aimForward, -inputZ);
+    this.wish.addScaledVector(this.aimRight, inputX);
+    this.moving = this.wish.lengthSq() > 0;
     if (this.moving) {
-      move.normalize();
+      this.wish.normalize();
       const radius = 0.46;
       const travel = moveSpeed * dt;
       const slices = Math.max(1, Math.ceil(travel / 0.04));
       const slice = travel / slices;
-      const pos = this.position.clone();
+      this.stepPos.copy(this.position);
       for (let i = 0; i < slices; i++) {
-        const next = pos.clone().addScaledVector(move, slice);
-        pos.copy(resolve ? resolve(next, radius) : next);
+        this.stepPos.addScaledVector(this.wish, slice);
+        if (resolve) this.stepPos.copy(resolve(this.stepPos, radius));
       }
-      this.position.copy(pos);
-      this.mesh.rotation.y = Math.atan2(move.x, move.z);
+      this.position.copy(this.stepPos);
+      this.mesh.rotation.y = Math.atan2(this.wish.x, this.wish.z);
     }
 
     if (this.mixer) {
@@ -375,15 +448,22 @@ export class PlayerController {
   }
 
   private frameCamera(dt: number, camera: THREE.PerspectiveCamera): void {
-    const distance = this.topDown ? 1.4 : this.cameraDistance;
-    const height = this.topDown ? 18 : this.cameraHeight;
-    const camOffset = new THREE.Vector3(
-      Math.sin(this.yaw) * distance,
-      height,
-      Math.cos(this.yaw) * distance,
-    );
-    const desired = this.position.clone().add(camOffset);
-    camera.position.lerp(desired, 1 - Math.pow(0.001, dt));
+    let distance = this.cameraDistance * this.zoom;
+    let height = this.cameraHeight * this.zoom;
+    if (this.topDown) {
+      distance = 1.6 * this.zoom;
+      height = 18 * this.zoom;
+    } else {
+      const basePitch = Math.atan2(this.cameraHeight, this.cameraDistance);
+      const pitch = THREE.MathUtils.clamp(basePitch + this.pitchOffset, 0.12, 1.35);
+      const radius = Math.hypot(this.cameraDistance, this.cameraHeight) * this.zoom;
+      distance = Math.cos(pitch) * radius;
+      height = Math.sin(pitch) * radius;
+    }
+    this.camOffset.set(Math.sin(this.yaw) * distance, height, Math.cos(this.yaw) * distance);
+    this.camDesired.copy(this.position).add(this.camOffset);
+    if (this.camDesired.y < 0.7) this.camDesired.y = 0.7;
+    camera.position.lerp(this.camDesired, 1 - Math.pow(0.001, dt));
     camera.lookAt(this.position.x, this.position.y + 1.2, this.position.z);
   }
 }

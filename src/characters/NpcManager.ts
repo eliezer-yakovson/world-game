@@ -6,6 +6,7 @@ import type { MemoryStore } from '../core/MemoryStore';
 import { bus } from '../core/EventBus';
 import { takeCharacterModel } from '../world/AssetLoader';
 import { pickClip } from './emotes';
+import { routineFor } from './schoolDay';
 
 export interface NpcActor {
   id: string;
@@ -39,6 +40,15 @@ export class NpcManager {
     this.profiles = Object.fromEntries(list.map((p) => [p.id, p]));
   }
 
+  removeActor(id: string): void {
+    const index = this.actors.findIndex((actor) => actor.id === id);
+    if (index < 0) return;
+    const actor = this.actors[index];
+    actor.mesh.removeFromParent();
+    this.entityManager.remove(actor.vehicle);
+    this.actors.splice(index, 1);
+  }
+
   clear(sceneGroup: THREE.Group): void {
     for (const actor of this.actors) {
       sceneGroup.remove(actor.mesh);
@@ -53,58 +63,65 @@ export class NpcManager {
     memory: MemoryStore,
   ): void {
     this.clear(sceneGroup);
-    for (const spawn of spawns) {
-      const profile = this.profiles[spawn.id];
-      if (!profile) continue;
-      memory.ensureNpc(spawn.id, {
-        trust: profile.trustTowardPlayer,
-        friendship: profile.friendship,
-        mood: profile.mood,
-      });
+    for (const spawn of spawns) this.spawnOne(sceneGroup, spawn, memory);
+  }
 
-      const { mesh, mixer, walkAction, idleAction, clips } = this.createMesh(spawn.id, profile.color);
-      mesh.position.copy(spawn.position);
-      mesh.userData.npcId = spawn.id;
-      mesh.traverse((child) => {
-        child.userData.npcId = spawn.id;
-      });
-      sceneGroup.add(mesh);
+  spawnOne(
+    sceneGroup: THREE.Group,
+    spawn: { id: string; position: THREE.Vector3 },
+    memory: MemoryStore,
+  ): void {
+    if (this.actors.some((actor) => actor.id === spawn.id)) return;
+    const profile = this.profiles[spawn.id];
+    if (!profile) return;
+    memory.ensureNpc(spawn.id, {
+      trust: profile.trustTowardPlayer,
+      friendship: profile.friendship,
+      mood: profile.mood,
+    });
 
-      const vehicle = new YUKA.Vehicle();
-      vehicle.maxSpeed = 1.8 + Math.random();
-      vehicle.position.set(spawn.position.x, 0, spawn.position.z);
+    const { mesh, mixer, walkAction, idleAction, clips } = this.createMesh(spawn.id, profile.color);
+    mesh.position.copy(spawn.position);
+    mesh.userData.npcId = spawn.id;
+    mesh.traverse((child) => {
+      child.userData.npcId = spawn.id;
+    });
+    sceneGroup.add(mesh);
 
-      const path = new YUKA.Path();
-      path.loop = true;
-      const cx = spawn.position.x;
-      const cz = spawn.position.z;
-      path.add(new YUKA.Vector3(cx, 0, cz));
-      path.add(new YUKA.Vector3(cx + 1.5, 0, cz + 1));
-      path.add(new YUKA.Vector3(cx - 0.6, 0, cz + 1.4));
-      path.add(new YUKA.Vector3(cx - 1.4, 0, cz));
+    const vehicle = new YUKA.Vehicle();
+    vehicle.maxSpeed = 1.8 + Math.random();
+    vehicle.position.set(spawn.position.x, 0, spawn.position.z);
 
-      const followPath = new YUKA.FollowPathBehavior(path, 0.5);
-      vehicle.steering.add(followPath);
+    const path = new YUKA.Path();
+    path.loop = true;
+    const cx = spawn.position.x;
+    const cz = spawn.position.z;
+    path.add(new YUKA.Vector3(cx, 0, cz));
+    path.add(new YUKA.Vector3(cx + 1.5, 0, cz + 1));
+    path.add(new YUKA.Vector3(cx - 0.6, 0, cz + 1.4));
+    path.add(new YUKA.Vector3(cx - 1.4, 0, cz));
 
-      this.entityManager.add(vehicle);
-      this.actors.push({
-        id: spawn.id,
-        profile: {
-          ...profile,
-          diary: memory.diaries[spawn.id] ?? [],
-          mood: memory.moods[spawn.id] ?? profile.mood,
-          trustTowardPlayer: memory.trust[spawn.id] ?? profile.trustTowardPlayer,
-        },
-        mesh,
-        vehicle,
-        path,
-        diaryQueue: [],
-        mixer,
-        clips,
-        walkAction,
-        idleAction,
-      });
-    }
+    const followPath = new YUKA.FollowPathBehavior(path, 0.5);
+    vehicle.steering.add(followPath);
+
+    this.entityManager.add(vehicle);
+    this.actors.push({
+      id: spawn.id,
+      profile: {
+        ...profile,
+        diary: memory.diaries[spawn.id] ?? [],
+        mood: memory.moods[spawn.id] ?? profile.mood,
+        trustTowardPlayer: memory.trust[spawn.id] ?? profile.trustTowardPlayer,
+      },
+      mesh,
+      vehicle,
+      path,
+      diaryQueue: [],
+      mixer,
+      clips,
+      walkAction,
+      idleAction,
+    });
   }
 
   setHeld(held: boolean): void {
@@ -159,6 +176,13 @@ export class NpcManager {
     actor.clipKey = key;
   }
 
+  /** Follow a scripted path. Other people do not push them off it. */
+  guide(id: string, x: number, z: number, yaw: number): void {
+    this.moveBusy(id, x, z, yaw);
+    const actor = this.actors.find((item) => item.id === id);
+    if (actor) actor.anchored = true;
+  }
+
   /** Walk toward a chore. Collision may still nudge them. */
   moveBusy(id: string, x: number, z: number, yaw: number): void {
     const actor = this.actors.find((item) => item.id === id);
@@ -166,7 +190,8 @@ export class NpcManager {
     actor.busy = true;
     actor.anchored = false;
     actor.mesh.position.set(x, 0, z);
-    actor.mesh.rotation.y = yaw;
+    actor.mesh.rotation.order = 'YXZ';
+    actor.mesh.rotation.set(0, yaw, 0);
     actor.vehicle.position.set(x, 0, z);
     actor.vehicle.velocity.set(0, 0, 0);
   }
@@ -178,8 +203,22 @@ export class NpcManager {
     actor.busy = true;
     actor.anchored = true;
     actor.mesh.position.set(x, 0, z);
-    actor.mesh.rotation.y = yaw;
+    actor.mesh.rotation.order = 'YXZ';
+    actor.mesh.rotation.set(0, yaw, 0);
     actor.vehicle.position.set(x, 0, z);
+    actor.vehicle.velocity.set(0, 0, 0);
+  }
+
+  /** Pin a person onto a moving playground seat. */
+  poseAt(id: string, pose: { x: number; y: number; z: number; yaw: number; pitch: number; roll: number }): void {
+    const actor = this.actors.find((item) => item.id === id);
+    if (!actor) return;
+    actor.busy = true;
+    actor.anchored = true;
+    actor.mesh.position.set(pose.x, pose.y, pose.z);
+    actor.mesh.rotation.order = 'YXZ';
+    actor.mesh.rotation.set(pose.pitch, pose.yaw, pose.roll);
+    actor.vehicle.position.set(pose.x, 0, pose.z);
     actor.vehicle.velocity.set(0, 0, 0);
   }
 
@@ -188,6 +227,10 @@ export class NpcManager {
     if (!actor) return;
     actor.busy = false;
     actor.anchored = false;
+    actor.mesh.rotation.order = 'YXZ';
+    actor.mesh.rotation.x = 0;
+    actor.mesh.rotation.z = 0;
+    actor.mesh.position.y = 0;
     actor.statusLine = undefined;
     actor.clipKey = undefined;
     actor.emoteAction?.fadeOut(0.15);
@@ -252,7 +295,7 @@ export class NpcManager {
   talkTo(actor: NpcActor, memory: MemoryStore, clock: GameClock): string {
     const trust = memory.trust[actor.id] ?? 50;
     const mood = memory.moods[actor.id] ?? 'neutral';
-    let line = actor.statusLine ?? `שלום! אני ${actor.profile.name}.`;
+    let line = actor.statusLine ?? routineFor(actor.id, clock.hour, clock.minuteOfHour);
     if (!actor.statusLine) {
       if (mood === 'happy') line = `${actor.profile.name}: היי! כיף לראות אותך.`;
       if (mood === 'angry') line = `${actor.profile.name}: עכשיו קצת קשה לי…`;
@@ -268,11 +311,7 @@ export class NpcManager {
   }
 
   private routineText(id: string, hour: number): string {
-    if (hour < 8) return 'מתעורר/ת בבוקר';
-    if (hour < 14) return id === 'teacher' ? 'מלמדת בכיתה' : 'בפעילות יומית';
-    if (hour < 18) return 'מסתובב/ת בשכונה או בפארק';
-    if (hour < 21) return 'בבית לקראת ערב';
-    return 'נרגע/ת לפני שינה';
+    return routineFor(id, hour, 0);
   }
 
   private createMesh(

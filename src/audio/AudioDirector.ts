@@ -27,6 +27,7 @@ export class AudioDirector {
     shop: 'shop',
     park: 'birds',
     zoo: 'animals',
+    luna: 'birds',
   };
 
   applySettings(settings: GameSettings): void {

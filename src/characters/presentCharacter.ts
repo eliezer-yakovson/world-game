@@ -3,6 +3,7 @@ import { lookFor, type CharacterLook } from './characterLooks';
 import { dressCharacter } from './outfits';
 
 const TOP_HAT_MIN_Y = 2.95;
+const COVERED_HAIR = new Set(['mom', 'dad', 'ori', 'roni', 'brother', 'shopkeeper', 'noam', 'dani', 'lior', 'eitan', 'aviv', 'yosef', 'teacher_david']);
 
 /**
  * The character GLBs were exported without textures. Skin is a near-black factor,
@@ -32,8 +33,9 @@ export function presentCharacter(root: THREE.Object3D, id: string): void {
       if (name === 'hat') isHat = true;
     }
     if (isHat && geometryMinY(mesh) > TOP_HAT_MIN_Y) mesh.visible = false;
-    if (isFace) replaceFaceWithEyes(mesh);
+    if (isFace) replaceFaceWithEyes(mesh, look.skin);
   });
+  if (COVERED_HAIR.has(id)) hideHair(root);
   dressCharacter(root, id);
 }
 
@@ -71,7 +73,16 @@ function geometryMinY(mesh: THREE.Mesh): number {
   return min;
 }
 
-function replaceFaceWithEyes(mesh: THREE.Mesh): void {
+function hideHair(root: THREE.Object3D): void {
+  root.traverse((obj) => {
+    const mesh = obj as THREE.Mesh;
+    if (!mesh.isMesh) return;
+    const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+    if (materials.some((material) => (material.name || '').toLowerCase() === 'hair')) mesh.visible = false;
+  });
+}
+
+function replaceFaceWithEyes(mesh: THREE.Mesh, skin: number): void {
   const geometry = mesh.geometry;
   const position = geometry.getAttribute('position');
   const index = geometry.getIndex();
@@ -129,7 +140,7 @@ function replaceFaceWithEyes(mesh: THREE.Mesh): void {
   const left = averageCenters(eyeCenters.filter((center) => center.x < 0));
   const right = averageCenters(eyeCenters.filter((center) => center.x >= 0));
   const sockets = [left, right].filter((center): center is THREE.Vector3 => center !== null);
-  attachEyes(mesh, sockets);
+  attachEyes(mesh, sockets, skin);
 }
 
 function averageCenters(centers: THREE.Vector3[]): THREE.Vector3 | null {
@@ -139,7 +150,7 @@ function averageCenters(centers: THREE.Vector3[]): THREE.Vector3 | null {
   return sum.multiplyScalar(1 / centers.length);
 }
 
-function attachEyes(mesh: THREE.Mesh, sockets: THREE.Vector3[]): void {
+function attachEyes(mesh: THREE.Mesh, sockets: THREE.Vector3[], skin: number): void {
   const skinned = mesh as THREE.SkinnedMesh;
   const head = skinned.skeleton?.bones.find((bone) => bone.name === 'Head');
   const headIndex = head ? skinned.skeleton?.bones.indexOf(head) ?? -1 : -1;
@@ -164,6 +175,42 @@ function attachEyes(mesh: THREE.Mesh, sockets: THREE.Vector3[]): void {
     eye.add(pupil);
     head.add(eye);
   }
+  attachNoseAndMouth(head, inverseBind, sockets, skin);
+}
+
+function attachNoseAndMouth(head: THREE.Bone, inverseBind: THREE.Matrix4, sockets: THREE.Vector3[], skin: number): void {
+  if (!sockets.length) return;
+  const mid = new THREE.Vector3();
+  for (const socket of sockets) mid.add(socket);
+  mid.multiplyScalar(1 / sockets.length);
+  const noseAt = mid.clone();
+  noseAt.y -= 0.13;
+  noseAt.z += 0.05;
+  const mouthAt = mid.clone();
+  mouthAt.y -= 0.25;
+  mouthAt.z += 0.035;
+  const nose = new THREE.Mesh(
+    new THREE.SphereGeometry(0.048, 12, 10),
+    new THREE.MeshStandardMaterial({ color: skin, roughness: 0.7, metalness: 0 }),
+  );
+  nose.scale.set(0.85, 1.15, 0.8);
+  nose.name = 'face-nose';
+  placeOnHead(head, inverseBind, nose, noseAt, 0.02);
+  const mouth = new THREE.Mesh(
+    new THREE.SphereGeometry(0.055, 12, 8),
+    new THREE.MeshStandardMaterial({ color: 0xa33d45, roughness: 0.55, metalness: 0 }),
+  );
+  mouth.scale.set(1.35, 0.42, 0.55);
+  mouth.name = 'face-mouth';
+  placeOnHead(head, inverseBind, mouth, mouthAt, 0.012);
+}
+
+function placeOnHead(head: THREE.Bone, inverseBind: THREE.Matrix4, feature: THREE.Object3D, bindPoint: THREE.Vector3, push: number): void {
+  const local = bindPoint.clone().applyMatrix4(inverseBind);
+  const ahead = bindPoint.clone().add(new THREE.Vector3(0, 0, 1)).applyMatrix4(inverseBind);
+  const outward = ahead.sub(local).normalize();
+  feature.position.copy(local).addScaledVector(outward, push);
+  head.add(feature);
 }
 
 function boundsOf(position: THREE.BufferAttribute | THREE.InterleavedBufferAttribute, members: number[]) {

@@ -12,6 +12,8 @@ import {
   type ZoneId,
 } from '../core/types';
 import type { ActiveSituation } from '../situations/SituationEngine';
+import { previewImage, recipeForChoiceKey, recipeForSituation } from './choiceShots';
+import type { LifeCard } from '../characters/npcLife';
 
 export class UIManager {
   root: HTMLDivElement;
@@ -31,6 +33,11 @@ export class UIManager {
   private rain: HTMLDivElement;
   private hudButtons: HTMLDivElement;
   private zoneLabel = 'הבית';
+  private captionTimer = 0;
+  private clockText = '';
+  private moneyText = '';
+  private rainOn = false;
+  private hintShown: string | null | undefined = undefined;
 
   onChoice?: (choiceId: string) => void;
   onBreathe?: () => void;
@@ -116,18 +123,38 @@ export class UIManager {
 
   updateClock(dayLabel: string, time: string, weather: string, zone: ZoneId, money?: number): void {
     const w = weather === 'rain' ? 'גשום' : weather === 'cloudy' ? 'מעונן' : 'בהיר';
-    this.clockEl.textContent = `${dayLabel} · ${time} · ${w}`;
-    this.rain.classList.toggle('visible', weather === 'rain');
-    this.zoneLabel = ZONE_LABELS[zone];
-    if (money !== undefined) this.updateMoney(money);
-    else {
-      const current = this.moneyEl.querySelector('strong')?.textContent ?? '0';
-      this.moneyEl.innerHTML = `כסף: <strong>${current}</strong> · אזור: ${this.zoneLabel}`;
+    const text = `${dayLabel} · ${time} · ${w}`;
+    if (text !== this.clockText) {
+      this.clockText = text;
+      this.clockEl.textContent = text;
+    }
+    const raining = weather === 'rain';
+    if (raining !== this.rainOn) {
+      this.rainOn = raining;
+      this.rain.classList.toggle('visible', raining);
+    }
+    const zoneLabel = ZONE_LABELS[zone];
+    if (money !== undefined) {
+      this.zoneLabel = zoneLabel;
+      this.writeMoney(money);
+      return;
+    }
+    if (zoneLabel !== this.zoneLabel || this.moneyText === '') {
+      this.zoneLabel = zoneLabel;
+      const current = Number(this.moneyEl.querySelector('strong')?.textContent ?? '0');
+      this.writeMoney(current);
     }
   }
 
   updateMoney(money: number): void {
-    this.moneyEl.innerHTML = `כסף: <strong>${money}</strong> · אזור: ${this.zoneLabel}`;
+    this.writeMoney(money);
+  }
+
+  private writeMoney(money: number): void {
+    const html = `כסף: <strong>${money}</strong> · אזור: ${this.zoneLabel}`;
+    if (html === this.moneyText) return;
+    this.moneyText = html;
+    this.moneyEl.innerHTML = html;
   }
 
   updateNeeds(hunger: number, fatigue: number): void {
@@ -161,18 +188,22 @@ export class UIManager {
   }
 
   showHint(text: string | null): void {
-    if (!text) {
+    const next = text || null;
+    if (next === this.hintShown) return;
+    this.hintShown = next;
+    if (!next) {
       this.hint.classList.remove('visible');
       return;
     }
-    this.hint.textContent = text;
+    this.hint.textContent = next;
     this.hint.classList.add('visible');
   }
 
   showCaption(text: string, ms = 3200): void {
     this.caption.textContent = text;
     this.caption.classList.add('visible');
-    window.setTimeout(() => this.caption.classList.remove('visible'), ms);
+    window.clearTimeout(this.captionTimer);
+    this.captionTimer = window.setTimeout(() => this.caption.classList.remove('visible'), ms);
   }
 
   showTitle(
@@ -235,19 +266,22 @@ export class UIManager {
     this.overlay.classList.remove('hidden');
     this.breatheBtn.classList.toggle('visible', showBreathe && active.def.tense && !active.breathed);
 
-    const choices = active.availableChoices
-      .map(
-        (c) =>
-          `<button data-choice="${c.id}">${c.label}${c.requiresBreathe && active.breathed ? ' ★' : ''}</button>`,
-      )
-      .join('');
+    const choices = this.choiceCards(
+      active.availableChoices.map((choice) => ({
+        id: choice.id,
+        label: choice.label,
+        shot: recipeForSituation(active.def.id, choice).key,
+        mark: choice.requiresBreathe && active.breathed ? ' ★' : '',
+      })),
+      'data-choice',
+    );
 
     this.overlay.innerHTML = `
       <div class="panel">
         <h2>${active.def.title}</h2>
         <p>${active.description}</p>
         <p class="emotion">${active.emotion}</p>
-        <div class="btn-row">${choices}</div>
+        ${choices}
         <button class="ghost" id="leave-sit" style="margin-top:12px">לקום ולעזוב</button>
       </div>
     `;
@@ -261,17 +295,20 @@ export class UIManager {
     this.hideOverlay();
     this.sceneDock.classList.add('visible');
     this.breatheBtn.classList.toggle('visible', showBreathe && active.def.tense && !active.breathed);
-    const choices = active.availableChoices
-      .map(
-        (choice) =>
-          `<button data-choice="${choice.id}">${choice.label}${choice.requiresBreathe && active.breathed ? ' ★' : ''}</button>`,
-      )
-      .join('');
+    const choices = this.choiceCards(
+      active.availableChoices.map((choice) => ({
+        id: choice.id,
+        label: choice.label,
+        shot: recipeForSituation(active.def.id, choice).key,
+        mark: choice.requiresBreathe && active.breathed ? ' ★' : '',
+      })),
+      'data-choice',
+    );
     this.sceneDock.innerHTML = `
       <div class="panel">
         <h2>${active.def.title}</h2>
         <p class="emotion">${active.emotion}</p>
-        <div class="btn-row">${choices}</div>
+        ${choices}
         <button class="ghost" id="leave-sit" style="margin-top:10px">לקום ולעזוב</button>
       </div>
     `;
@@ -285,6 +322,33 @@ export class UIManager {
     this.sceneDock.classList.remove('visible');
     this.sceneDock.innerHTML = '';
     this.breatheBtn.classList.remove('visible');
+  }
+
+  /** Choices that stay at the bottom so the scene behind them remains visible. */
+  showBranches(
+    title: string,
+    note: string,
+    choices: Array<{ id: string; label: string; shot?: string }>,
+    cancelLabel: string,
+  ): void {
+    this.hideOverlay();
+    this.sceneDock.classList.add('visible');
+    const buttons = this.choiceCards(
+      choices.map((choice) => ({ id: choice.id, label: choice.label, shot: choice.shot ?? choice.id })),
+      'data-branch',
+    );
+    this.sceneDock.innerHTML = `
+      <div class="panel">
+        <h2>${title}</h2>
+        <p>${note}</p>
+        ${buttons}
+        <button class="ghost" id="branch-cancel" style="margin-top:10px">${cancelLabel}</button>
+      </div>
+    `;
+    this.sceneDock.querySelectorAll('[data-branch]').forEach((button) => {
+      button.addEventListener('click', () => this.onHudAction?.(`branch:${(button as HTMLElement).dataset.branch}`));
+    });
+    this.sceneDock.querySelector('#branch-cancel')?.addEventListener('click', () => this.onHudAction?.('branch:cancel'));
   }
 
   playBreatheAnimation(): Promise<void> {
@@ -322,6 +386,22 @@ export class UIManager {
     return !this.overlay.classList.contains('hidden');
   }
 
+  private choiceCards(
+    choices: Array<{ id: string; label: string; shot?: string; mark?: string; extraClass?: string }>,
+    attr: string,
+  ): string {
+    return `<div class="choice-cards">${choices
+      .map((choice) => {
+        const recipe = recipeForChoiceKey(choice.shot ?? choice.id, choice.label);
+        const src = previewImage(recipe);
+        return `<button class="choice-card ${choice.extraClass ?? ''}" ${attr}="${choice.id}">
+          <img src="${src}" alt="" />
+          <span>${choice.label}${choice.mark ?? ''}</span>
+        </button>`;
+      })
+      .join('')}</div>`;
+  }
+
   showTasks(
     heading: string,
     tasks: Array<{ kind: string; title: string; note: string | null; current: boolean }>,
@@ -333,14 +413,15 @@ export class UIManager {
         <h2>${heading}</h2>
         <p>בחרו משימה. הדמות תמשיך בה עד שתבחרו משימה אחרת. משחקי הבנייה גדלים כל עוד משחקים.</p>
         <div class="task-grid">
-          ${tasks
-            .map(
-              (task) => `<button data-task="${task.kind}" class="${task.current ? 'selected' : ''}">
-                <span>${task.title}</span>
-                ${task.note ? `<small>${task.note}</small>` : ''}
-              </button>`,
-            )
-            .join('')}
+          ${this.choiceCards(
+            tasks.map((task) => ({
+              id: task.kind,
+              label: task.note ? `${task.title} · ${task.note}` : task.title,
+              shot: task.kind,
+              extraClass: task.current ? 'selected' : '',
+            })),
+            'data-task',
+          )}
         </div>
         <div class="btn-row">
           ${canStop ? '<button class="ghost" id="stop-task">להפסיק וללכת</button>' : ''}
@@ -370,7 +451,18 @@ export class UIManager {
     this.setHudVisible(true);
   }
 
-  showInspector(profile: NpcProfile, trust: number, friendship: number, diary: Array<{ timeLabel: string; text: string }>): void {
+  showInspector(
+    profile: NpcProfile,
+    trust: number,
+    friendship: number,
+    diary: Array<{ timeLabel: string; text: string }>,
+    life: LifeCard | null = null,
+  ): void {
+    const strengths = life
+      ? (Object.keys(STRENGTH_LABELS) as (keyof StrengthMap)[])
+          .map((key) => `<span>${STRENGTH_LABELS[key]} ${life.strengths[key]}</span>`)
+          .join('')
+      : '';
     this.inspector.classList.add('visible');
     this.inspector.innerHTML = `
       <h3>${profile.name}</h3>
@@ -378,7 +470,18 @@ export class UIManager {
       <p>גר/ה: ${profile.home}</p>
       <p>לומד/עובד: ${profile.workOrSchool}</p>
       <p>תכונות: ${profile.traits.join(', ')}</p>
-      <p>אמון: ${trust} · חברות: ${friendship} · מצב רוח: ${profile.mood}</p>
+      <p>אמון: ${trust} · חברות: ${friendship} · מצב רוח: ${{ happy: 'שמח', neutral: 'רגיל', sad: 'עצוב', angry: 'כועס', tired: 'עייף', excited: 'נרגש', anxious: 'לחוץ' }[profile.mood] ?? profile.mood}</p>
+      ${
+        life
+          ? `<h4>איפה במשחק</h4>
+      <p>${life.zone} · ${life.place}</p>
+      <p>${life.step}</p>
+      <p><strong>${life.doing}</strong></p>
+      <h4>הישגים: ${life.achievements.length}</h4>
+      <div class="life-strengths">${strengths}</div>
+      <ul class="diary">${life.achievements.map((item) => `<li><strong>${item.timeLabel}</strong> — ${item.title}. ${item.detail}</li>`).join('') || '<li>עדיין אין הישגים. הם נצברים כשהבחירה נגמרת.</li>'}</ul>`
+          : ''
+      }
       <h4>מה עבר עליו היום</h4>
       <ul class="diary">${diary.map((d) => `<li><strong>${d.timeLabel}</strong> — ${d.text}</li>`).join('') || '<li>עדיין אין רשומות</li>'}</ul>
       <button class="ghost" id="close-insp">סגור</button>
@@ -622,6 +725,7 @@ export class UIManager {
           <button data-z="shop">למכולת</button>
           <button data-z="zoo">לגן החיות</button>
           <button data-z="park">לפארק</button>
+          <button data-z="luna">ללונה פארק</button>
         </div>
         <button class="ghost" id="cancel-car">ביטול</button>
       </div>`;
@@ -637,15 +741,18 @@ export class UIManager {
       <div class="panel">
         <h2>משחקי חצר</h2>
         <p>בחרו משחק ותפקיד.</p>
-        <div class="btn-row">
-          <button data-role="organizer">תופסת — מארגן/ת</button>
-          <button data-role="player">תופסת — משתתף/ת</button>
-          <button data-role="watcher">תופסת — צופה</button>
-          <button data-role="hide">מחבואים</button>
-          <button data-role="ball">כדור</button>
-          <button data-role="rope">חבל</button>
-          <button data-role="king">מלך ההר</button>
-        </div>
+        ${this.choiceCards(
+          [
+            ['organizer', 'תופסת — מארגן/ת'],
+            ['player', 'תופסת — משתתף/ת'],
+            ['watcher', 'תופסת — צופה'],
+            ['hide', 'מחבואים'],
+            ['ball', 'כדור'],
+            ['rope', 'חבל'],
+            ['king', 'מלך ההר'],
+          ].map(([id, label]) => ({ id, label, shot: id })),
+          'data-role',
+        )}
         <button class="ghost" id="close-recess">ביטול</button>
       </div>
     `;

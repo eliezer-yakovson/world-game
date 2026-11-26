@@ -16,6 +16,12 @@ export class PlayerController {
   private yaw = 0;
   cameraDistance = 10;
   cameraHeight = 6;
+  /** 1 is the zone's usual framing. Smaller brings the world closer. */
+  private zoom = 1;
+  /** Added to the zone's camera angle. Dragging up and down changes it. */
+  private pitchOffset = 0;
+  private readonly camOffset = new THREE.Vector3();
+  private readonly camDesired = new THREE.Vector3();
   topDown = false;
   private sensitivity = 1;
   private mixer?: THREE.AnimationMixer;
@@ -170,6 +176,18 @@ export class PlayerController {
     return this.yaw;
   }
 
+  /** Drag orbit. Horizontal motion turns a full circle; vertical motion tilts. */
+  orbit(dx: number, dy: number): void {
+    const sens = 0.008 * this.sensitivity;
+    this.yaw -= dx * sens;
+    this.pitchOffset = THREE.MathUtils.clamp(this.pitchOffset + dy * sens * 0.85, -0.42, 0.82);
+  }
+
+  /** Wheel zoom. Positive deltaY moves the camera farther away. */
+  zoomBy(deltaY: number): void {
+    this.zoom = THREE.MathUtils.clamp(this.zoom * Math.exp(deltaY * 0.0011), 0.38, 2.8);
+  }
+
   get posing(): boolean {
     return this.pose !== null;
   }
@@ -283,14 +301,15 @@ export class PlayerController {
       if (!blocked) {
         if (this.keys.has('KeyQ')) this.yaw += dt * 1.5 * this.sensitivity;
         if (this.keys.has('KeyR')) this.yaw -= dt * 1.5 * this.sensitivity;
-        this.frameCamera(dt, camera);
       }
       this.mixer?.update(dt);
+      this.frameCamera(dt, camera);
       return;
     }
 
     if (blocked) {
       this.mixer?.update(dt);
+      this.frameCamera(dt, camera);
       return;
     }
 
@@ -379,15 +398,22 @@ export class PlayerController {
   }
 
   private frameCamera(dt: number, camera: THREE.PerspectiveCamera): void {
-    const distance = this.topDown ? 1.4 : this.cameraDistance;
-    const height = this.topDown ? 18 : this.cameraHeight;
-    const camOffset = new THREE.Vector3(
-      Math.sin(this.yaw) * distance,
-      height,
-      Math.cos(this.yaw) * distance,
-    );
-    const desired = this.position.clone().add(camOffset);
-    camera.position.lerp(desired, 1 - Math.pow(0.001, dt));
+    let distance = this.cameraDistance * this.zoom;
+    let height = this.cameraHeight * this.zoom;
+    if (this.topDown) {
+      distance = 1.6 * this.zoom;
+      height = 18 * this.zoom;
+    } else {
+      const basePitch = Math.atan2(this.cameraHeight, this.cameraDistance);
+      const pitch = THREE.MathUtils.clamp(basePitch + this.pitchOffset, 0.12, 1.35);
+      const radius = Math.hypot(this.cameraDistance, this.cameraHeight) * this.zoom;
+      distance = Math.cos(pitch) * radius;
+      height = Math.sin(pitch) * radius;
+    }
+    this.camOffset.set(Math.sin(this.yaw) * distance, height, Math.cos(this.yaw) * distance);
+    this.camDesired.copy(this.position).add(this.camOffset);
+    if (this.camDesired.y < 0.7) this.camDesired.y = 0.7;
+    camera.position.lerp(this.camDesired, 1 - Math.pow(0.001, dt));
     camera.lookAt(this.position.x, this.position.y + 1.2, this.position.z);
   }
 }

@@ -281,7 +281,12 @@ export class Game {
       this.goToZone('home');
     });
 
-    this.renderer.domElement.addEventListener('pointerdown', this.onPointerDown);
+    const canvas = this.renderer.domElement;
+    canvas.addEventListener('pointerdown', this.onPointerDown);
+    canvas.addEventListener('pointermove', this.onPointerMove);
+    canvas.addEventListener('pointerup', this.onPointerUp);
+    canvas.addEventListener('pointercancel', this.onPointerUp);
+    canvas.addEventListener('wheel', this.onWheel, { passive: false });
   }
 
   private beginNewGame(playerId: string, freePlay = false): void {
@@ -513,11 +518,67 @@ export class Game {
     );
   }
 
-  private onPointerDown = (ev: PointerEvent): void => {
-    if (!this.running || this.blocked) return;
-    // Ignore UI clicks
-    if ((ev.target as HTMLElement)?.closest?.('#ui-root .panel, #ui-root button, #overlay')) return;
+  private orbiting = false;
+  private orbitMoved = false;
+  private orbitTravel = 0;
+  private orbitX = 0;
+  private orbitY = 0;
+  private orbitPointer = -1;
 
+  private onPointerDown = (ev: PointerEvent): void => {
+    if (!this.running || ev.button !== 0) return;
+    if ((ev.target as HTMLElement)?.closest?.('#ui-root .panel, #ui-root button, #overlay')) return;
+    this.orbiting = true;
+    this.orbitMoved = false;
+    this.orbitTravel = 0;
+    this.orbitX = ev.clientX;
+    this.orbitY = ev.clientY;
+    this.orbitPointer = ev.pointerId;
+    try {
+      this.renderer.domElement.setPointerCapture(ev.pointerId);
+    } catch {
+      // The pointer may already have been released. Move and up still orbit.
+    }
+    this.renderer.domElement.classList.add('dragging');
+  };
+
+  private onPointerMove = (ev: PointerEvent): void => {
+    if (!this.orbiting || ev.pointerId !== this.orbitPointer) return;
+    const dx = ev.clientX - this.orbitX;
+    const dy = ev.clientY - this.orbitY;
+    this.orbitX = ev.clientX;
+    this.orbitY = ev.clientY;
+    this.orbitTravel += Math.hypot(dx, dy);
+    if (this.orbitTravel > 5) this.orbitMoved = true;
+    this.player.orbit(dx, dy);
+  };
+
+  private onPointerUp = (ev: PointerEvent): void => {
+    if (!this.orbiting || ev.pointerId !== this.orbitPointer) return;
+    this.orbiting = false;
+    this.renderer.domElement.classList.remove('dragging');
+    try {
+      if (this.renderer.domElement.hasPointerCapture(ev.pointerId)) {
+        this.renderer.domElement.releasePointerCapture(ev.pointerId);
+      }
+    } catch {
+      // Already released.
+    }
+    if (this.orbitMoved || this.blocked) return;
+    this.pickNpc(ev);
+  };
+
+  private onWheel = (ev: WheelEvent): void => {
+    if (!this.running) return;
+    if ((ev.target as HTMLElement)?.closest?.('#ui-root .panel, #overlay')) return;
+    ev.preventDefault();
+    let delta = ev.deltaY;
+    if (ev.deltaMode === WheelEvent.DOM_DELTA_LINE) delta *= 16;
+    else if (ev.deltaMode === WheelEvent.DOM_DELTA_PAGE) delta *= 400;
+    this.player.zoomBy(delta);
+  };
+
+  private pickNpc(ev: PointerEvent): void {
     const rect = this.renderer.domElement.getBoundingClientRect();
     this.pointer.x = ((ev.clientX - rect.left) / rect.width) * 2 - 1;
     this.pointer.y = -((ev.clientY - rect.top) / rect.height) * 2 + 1;
